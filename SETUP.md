@@ -1,5 +1,15 @@
 # 环境与复现
 
+## 获取代码
+
+```sh
+git clone --recurse-submodules <本仓库地址> ba-shortdrama
+# 已 clone 但没带 submodule：
+git submodule update --init
+```
+
+`code/ba-production` 直接在本仓库里；`code/carocut` 是 [bilibili/carocut](https://github.com/bilibili/carocut) 的 submodule，版本由本仓库固定。`data/`、`videos/`、`local/`、`temp/`、`attachments/` 是本机素材与产物，不进版本库。
+
 ## 依赖
 
 - macOS（本项目在 macOS 上验证；Linux 未测试）

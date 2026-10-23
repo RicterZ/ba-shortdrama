@@ -4,7 +4,7 @@
 
 ```text
 ba-shortdrama/
-├── code/carocut/          上游 checkout（commit 记录在 workspace.yaml）
+├── code/carocut/          上游 bilibili/carocut（git submodule，版本由主仓库固定）
 ├── code/ba-production/    自有生产链（模板、schema、脚本）
 ├── data/characters/       角色 profile（人设、语音绑定、服装与立绘）；<id>/kivo/ 存 kivo 原始资料与差分/spine，<id>/sprites/ 存全身表情立绘与 manifest
 ├── data/scenes/           场景 profile + 背景图（<id>/scene.yaml、<id>/backgrounds/）

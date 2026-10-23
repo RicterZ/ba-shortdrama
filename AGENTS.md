@@ -1,17 +1,17 @@
-# Worktree Resource Layout
+# Repository Layout
 
-This root repository tracks project documentation and workspace configuration.
-The original resource directory is `/Users/sakana/Projects/ba-shortdrama`.
+This is a single Git repository with one submodule. The original resource
+directory is `/Users/sakana/Projects/ba-shortdrama`.
 
-- `code/ba-production`, `code/carocut`, and `carocut` are independent Git
-  repositories, not submodules. They are not copied into root worktrees.
-- `data`, `videos`, `attachments`, `local`, and `temp` remain in the original
-  resource directory. Use explicit paths when reading these shared resources.
+- Root repository: project documentation, `workspace.yaml`, and the production
+  code in `code/ba-production`. Commit code changes here, not in a nested repo.
+- `code/carocut` is a Git submodule of https://github.com/bilibili/carocut.
+  Run `git submodule update --init` in a fresh clone or worktree. Do not commit
+  local carocut patches into the submodule pin without pushing them upstream.
+- `data`, `videos`, `attachments`, `local`, and `temp` are local resources and
+  are not versioned. They stay in the original resource directory; use explicit
+  paths when reading them from a worktree.
 - Never commit secrets from `local/.env`, downloaded media, caches, or dependencies.
-- Do not assume relative resource paths in `workspace.yaml` resolve in a fresh
-  worktree. Supply the original resource root explicitly where needed.
-- Root worktree isolation does not isolate writes to the shared resources or
-  nested repositories. Inspect them read-only unless the task requires edits;
-  coordinate conflicting writes and use task-specific output directories.
-- For source changes in a nested repository, use a separate worktree of that
-  repository rather than concurrently editing its original working copy.
+- Worktree isolation does not isolate writes to the shared resources. Inspect
+  them read-only unless the task requires edits, and use task-specific output
+  directories.
