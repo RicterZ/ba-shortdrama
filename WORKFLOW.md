@@ -76,8 +76,13 @@ npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-mom
 - `scene` 引用 `data/scenes/<id>/scene.yaml`，可写成字符串（用默认变体）或 `{id, variant}`。变体决定光线和墙面色，例如 `afternoon` / `monitor-glow` / `lamp`；切镜时自动换光。
 - `outfit` 选角色 profile 里的服装；省略时用 `default_outfit`。同一角色可以在不同镜头穿不同衣服。
 - `x` 是角色中心横坐标（0–1）；`bottom` 是底部偏移比例；`height` 是画面高度占比；`scale` 是额外缩放。
-- `entrance`：`none` / `fade-in` / `slide-in-left` / `slide-in-right`。
-- `motion`（可选）：镜头内的走位。`fromX` / `toX` 与 `fromBottom` / `toBottom` 是起点和终点的位置比例，`fromScale` / `toScale` 是缩放，`startFrame` / `endFrame` 相对镜头起点（省略时从 0 到镜头结束），`ease` 取 `linear` / `ease-in-out`。省略的起止值取角色当前的 `x` / `bottom` / `scale`。例如 `{"fromX":0.9,"toX":0.83,"ease":"ease-in-out"}` 让角色从画面右侧走到站位。
+- `entrance`：`none` / `fade-in` / `slide-in-left` / `slide-in-right`；滑入是纯平移，没有步伐起伏。
+- `motion`（可选）：镜头内的走位。`fromX` / `toX` 与 `fromBottom` / `toBottom` 是起点和终点的位置比例，`fromScale` / `toScale` 是缩放，`startFrame` / `endFrame` 相对镜头起点（省略时从 0 到镜头结束），`ease` 取 `linear` / `ease-in-out`。省略的起止值取角色当前的 `x` / `bottom` / `scale`。走位只做平移，不模拟走路；走完停在终点，后续镜头沿用同一个 `x` / `bottom`，不要每镜重新漂移。
+- `facing`（可选）：`left` / `right`，默认 `right`（原图方向）；`left` 把立绘水平镜像。
+- `turns`（可选）：转身动画。`to` 是转向后的朝向，`atLine` 写该镜头内的一句台词 id（在该句开始时转身），或写 `startFrame`（相对镜头起点）；`durationInFrames` 默认 6。转身用水平镜像过渡表现，例如 Momoi 从看 Midori 转去看 Kei：
+  ```json
+  { "id": "saiba-momoi", "facing": "left", "turns": [{ "to": "right", "atLine": "L18", "durationInFrames": 10 }] }
+  ```
 - `camera`：`static` / `punch-in` / `push-in` / `pull-back`。
 - 仍然可以用 `background` 兜底：CSS 渐变字符串，或 `{"type":"image","path":"images/xxx.webp"}`（路径相对 `raws/`）。有 `scene` 时优先用场景渲染器。
 - 每个镜头可放多个角色；当前说话人高亮，其他人自动压暗。说话人也可以不在画面里（画外音）。
@@ -180,11 +185,25 @@ npm run ep:validate
 
 ## 6. 渲染
 
+采用两阶段渲染：先出快速预览审片，通过后再出高质量成片。
+
 ```sh
-EPISODE=003-summer-patch npm run ep:render
+# 快速预览：半尺寸、每 3 帧采样一次（720p/30fps 源输出 640×360/10fps），ultrafast 编码
+EPISODE=003-summer-patch npm run ep:preview -- --mode video
+
+# 审片通过后：2x 输出尺寸、高质量编码，输出 output/<episode-id>.mp4
+EPISODE=003-summer-patch npm run ep:final -- --mode video
 ```
 
-输出 `output/<episode-id>.mp4` 和 `preview/frame-NNNN.png`。默认 1280×720@30；改 `episode.yaml` 的 `width` / `height` / `fps` 后重新准备即可换画幅。
+两个阶段共用同一份 `project/scene.json` 和时间轴，预览阶段不要改素材或重新生成语音。`preview/frame-NNNN.png` 用来抽查单帧。默认 1280×720@30；改 `episode.yaml` 的 `width` / `height` / `fps` 后重新准备即可换画幅。
+
+执行约束：先 validate，再 preview；人工确认后才运行 final。画面修改复用未变更的音频，重新 prepare 和 validate 后重出 preview。静帧单独使用 ep:still，不让视频命令默认附带静帧。
+
+当前 preview 已在 render.py 实现 scale=0.5、every-nth-frame=3、JPEG 70、CRF 28、ultrafast、默认并发 4；不是先渲染高清再压缩。Remotion 按源时间轴采样，并相应降低输出帧率，保留音频和播放时长（末尾允许一个采样间隔的舍入误差）。只降低预览质量，不修改 scene.json、语音或素材；细微动画和快速表情切换仍需正式帧率复核。不要未经测速改成并发 12。render.py 默认 video，并输出单次 Remotion 调用总耗时，不代表已实现分阶段性能分析。
+
+final 当前仍只放大画幅，没有自动 60fps 转换；2560×1440/60fps 仍是待实现的交付目标，不能直接改 fps 数字改变片长。
+
+排查慢渲染时保留完整进度和退出码，不使用 tail 隐藏日志；记录实际 profile、输出规格、总耗时。未测量前不要把耗时归因于某一个阶段。
 
 ## 7. 审片与发布
 
