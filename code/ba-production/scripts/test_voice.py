@@ -80,6 +80,18 @@ class VoiceTests(unittest.TestCase):
                     voice.synth_with_retry("test", cfg, Path(tmp) / "test.mp3", 1, False)
                 self.assertEqual(synth.call_count, 3)
 
+    def test_voice_text_keeps_subtitle(self):
+        script = lib.normalize_script(
+            [
+                {"id": "L1", "speaker": "a", "text": "字幕", "voice_text": " よみあげ  "},
+                {"id": "L2", "speaker": "a", "text": "字幕だけ"},
+            ]
+        )
+        self.assertEqual(script[0]["text"], "字幕")
+        self.assertEqual(lib.spoken_text(script[0]), "よみあげ")
+        self.assertNotIn("voice_text", script[1])
+        self.assertEqual(lib.spoken_text(script[1]), "字幕だけ")
+
     def test_profiles_and_schema(self):
         schema = json.loads((lib.SCHEMAS / "profile.json").read_text())
         for path in lib.CHARACTERS.glob("*/profile.yaml"):

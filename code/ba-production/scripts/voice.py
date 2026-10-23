@@ -541,7 +541,7 @@ def cmd_episode(args: argparse.Namespace) -> int:
             contents = [
                 {
                     "voiceId": char["voice"]["voice_id"],
-                    "text": line["text"],
+                    "text": lib.spoken_text(line),
                     "speechRate": float(char["voice"].get("speed", 1.0)),
                 }
                 for _, line, char, _ in pending
@@ -580,7 +580,7 @@ def cmd_episode(args: argparse.Namespace) -> int:
 
     for index, line, char, target in pending:
         try:
-            tts = synthesize_line(line["text"], char["voice"], target, args.timeout, args.fallback)
+            tts = synthesize_line(lib.spoken_text(line), char["voice"], target, args.timeout, args.fallback)
         except Exception as exc:  # noqa: BLE001
             log.error("line fail id=%s speaker=%s error=%s", line["id"], line["speaker"], exc)
             print(f"  FAIL {line['id']} {line['speaker']}: {exc}")
