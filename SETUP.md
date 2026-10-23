@@ -64,6 +64,26 @@ EPISODE=003-summer-patch npm run ep:still -- --frame 120
 uv run python code/ba-production/scripts/prepare.py --episode 002-hidden-ending
 ```
 
+## 语音 provider 选择（Agent 必须先询问用户）
+
+Agent 在新 checkout 上第一次生成语音（`ep:prepare`、`npm run voice -- sample/episode`）之前，必须先询问用户使用哪个语音 provider，不得自行决定：
+
+| 选项 | 需要用户提供 | 写入位置 |
+|---|---|---|
+| `vocu`（悟声，现有角色默认） | `VOCU_API_KEY`（付费账户）；各角色的 `voice_id` | key 写 `local/.env`，`voice_id` 写角色 profile |
+| `fish-audio` | `FISH_AUDIO_API_KEY`；各角色的 `voice_id` | 同上 |
+| `edge-tts` | 无，免费、不需要 key | 只改角色 profile |
+| 不选 | 无 | 不改配置，生成时加 fallback 参数 |
+
+流程：
+
+1. 用户选了付费 provider：请用户提供 key，Agent 写入 `local/.env` 并 `chmod 600 local/.env`。不要把 key 写进命令行参数、提交、日志或 issue 评论；回复里只说"已写入"，不要回显 key。用户想自己填时，告诉他变量名，等他确认填好再继续。
+2. 角色 profile 的 `voice.provider`、`voice.voice_id`、`voice.api_key_env` 要和所选 provider 一致；不同服务的音色 ID 不通用，缺 `voice_id` 时向用户要，不要猜。
+3. 运行 `npm run voice -- check` 确认 key 和音色可用，通过后再生成。
+4. 用户不选，或者暂时没有 key：使用 profile 里的 `voice.fallback`（通常是 `edge-tts`），生成时显式加 `--voice-fallback`（`prepare.py`）或 `--fallback`（`voice.py`），并告诉用户当前音频来自 fallback 声线，之后换回正式 provider 时要重新合成，不能带 `--reuse-audio`。
+
+用户已经做过选择、`local/.env` 里已有对应 key 时，不必重复询问。
+
 ## API key
 
 语音由各角色 profile 的 `voice.provider` 选择，可在同一集混用 `vocu`、`fish-audio`、`edge-tts`。现有三名角色默认走 Vocu，key 只保存在本机：
