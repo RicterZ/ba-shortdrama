@@ -168,6 +168,29 @@
                 "emotion": {
                   "type": "string"
                 },
+                "holdEmotion": {
+                  "type": "boolean"
+                },
+                "emotionCues": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "emotion",
+                      "startFrame"
+                    ],
+                    "properties": {
+                      "emotion": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "startFrame": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    }
+                  }
+                },
                 "facing": {
                   "enum": [
                     "left",
@@ -249,6 +272,15 @@
                         "linear",
                         "ease-in-out"
                       ]
+                    },
+                    "hops": {
+                      "type": "integer",
+                      "minimum": 2
+                    },
+                    "hopLift": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 0.5
                     }
                   }
                 }

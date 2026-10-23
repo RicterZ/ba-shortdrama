@@ -317,6 +317,17 @@ def build_shots(
                 for field in ("startFrame", "endFrame"):
                     if motion.get(field) is not None:
                         motion[field] = int(motion[field]) + lead
+            emotion_cues = []
+            for cue in entry.get("emotionCues") or []:
+                name = cue.get("emotion")
+                if not name:
+                    raise SystemExit(f"镜头 {raw['id']} 角色 {entry['id']} 的 emotionCues 缺少 emotion")
+                cue_frame = int(cue.get("startFrame", 0)) + lead
+                if not (0 <= cue_frame < duration):
+                    raise SystemExit(
+                        f"镜头 {raw['id']} 角色 {entry['id']} 的表情起点 {cue_frame} 超出镜头时长 {duration} 帧"
+                    )
+                emotion_cues.append({"emotion": name, "startFrame": cue_frame})
             characters.append(
                 {
                     "id": entry["id"],
@@ -328,6 +339,8 @@ def build_shots(
                     "entrance": entry.get("entrance", "fade-in"),
                     "exit": entry.get("exit", "none"),
                     "emotion": entry.get("emotion", "default"),
+                    "holdEmotion": bool(entry.get("holdEmotion", False)),
+                    "emotionCues": emotion_cues,
                     "facing": facing,
                     "turns": turns,
                     "motion": motion,
@@ -537,6 +550,8 @@ def main() -> int:
     for shot in shots:
         for entry in shot["characters"]:
             used.add((entry["id"], entry["outfit"], entry["emotion"]))
+            for cue in entry.get("emotionCues") or []:
+                used.add((entry["id"], entry["outfit"], cue["emotion"]))
     for cid, char in characters.items():
         used.add((cid, char["default_outfit"], "default"))
 

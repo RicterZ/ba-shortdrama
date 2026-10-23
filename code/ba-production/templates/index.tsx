@@ -102,6 +102,10 @@ type CharacterMotion = {
   startFrame?: number;
   endFrame?: number;
   ease?: 'linear' | 'ease-in-out';
+  /** Split the move into this many hops: each hop springs forward and lands. */
+  hops?: number;
+  /** Height of each hop as a fraction of the frame; default 0.05. */
+  hopLift?: number;
 };
 
 type CharacterTurn = {
@@ -142,6 +146,10 @@ type Shot = {
     entrance: string;
     exit: string;
     emotion: string;
+    /** Keep the emotion of this character's last spoken line instead of reverting. */
+    holdEmotion?: boolean;
+    /** Timed expression changes that do not wait for the character's next line. */
+    emotionCues?: Array<{ emotion: string; startFrame: number }>;
     facing?: 'left' | 'right';
     turns?: CharacterTurn[];
     motion?: CharacterMotion | null;
@@ -357,9 +365,11 @@ const CharacterFigure: React.FC<{
   entry: Shot['characters'][number];
   data: CharacterData;
   activeLine?: Line;
+  /** Emotion of this character's latest line at or before the current frame. */
+  heldEmotion?: string;
   shadowColor: string;
   shotDuration: number;
-}> = ({ entry, data, activeLine, shadowColor, shotDuration }) => {
+}> = ({ entry, data, activeLine, heldEmotion, shadowColor, shotDuration }) => {
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
   if (!data) return null;
@@ -368,7 +378,17 @@ const CharacterFigure: React.FC<{
   if (!outfit) return null;
   const isSpeaking = activeLine?.speaker === entry.id;
   const isDimmed = Boolean(activeLine) && !isSpeaking;
-  const emotion = isSpeaking ? activeLine?.emotion || entry.emotion : entry.emotion;
+  // Latest timed expression cue wins — it can interrupt a spoken line, e.g. a
+  // blush that lands one beat into a denial. Otherwise a speaking line's
+  // emotion, then the held emotion, then the shot's standing face.
+  let cued: string | undefined;
+  for (const cue of entry.emotionCues ?? []) {
+    if (frame >= cue.startFrame) cued = cue.emotion;
+  }
+  const spoken = isSpeaking
+    ? activeLine?.emotion || entry.emotion
+    : heldEmotion || entry.emotion;
+  const emotion = cued || spoken;
   const sprites = outfit.sprites || {};
   const sprite = sprites[emotion] || sprites.default;
   if (!sprite) return null;
@@ -380,17 +400,43 @@ const CharacterFigure: React.FC<{
   // pure translation; there is no walk cycle or step bob.
   const motion = entry.motion;
   let px = entry.x;
-  let pBottom = entry.bottom;
+  let ground = entry.bottom;
+  let lift = 0;
   let poseScale = entry.scale;
   if (motion) {
     const start = motion.startFrame ?? 0;
     const end = Math.max(start + 1, motion.endFrame ?? shotDuration);
-    const raw = interpolate(frame, [start, end], [0, 1], clamp);
-    const t = motion.ease === 'linear' ? raw : raw * raw * (3 - 2 * raw);
-    px = interpolate(t, [0, 1], [motion.fromX ?? entry.x, motion.toX ?? entry.x]);
-    pBottom = interpolate(t, [0, 1], [motion.fromBottom ?? entry.bottom, motion.toBottom ?? entry.bottom]);
-    poseScale = interpolate(t, [0, 1], [motion.fromScale ?? entry.scale, motion.toScale ?? entry.scale]);
+    const fromX = motion.fromX ?? entry.x;
+    const toX = motion.toX ?? entry.x;
+    const fromBottom = motion.fromBottom ?? entry.bottom;
+    const toBottom = motion.toBottom ?? entry.bottom;
+    const fromScale = motion.fromScale ?? entry.scale;
+    const toScale = motion.toScale ?? entry.scale;
+    const hops = Math.max(0, Math.floor(motion.hops ?? 0));
+    if (hops > 1) {
+      // Hop block: the distance is split into equal jumps. Each jump eases out
+      // along x and lifts in a sine arc, so the character lands and takes off
+      // again instead of gliding between marks.
+      const span = end - start;
+      const hopLength = span / hops;
+      const local = Math.min(span, Math.max(0, frame - start)) / hopLength;
+      const index = Math.min(hops - 1, Math.floor(local));
+      const u = frame >= end ? 1 : local - index;
+      const eased = u * u * (3 - 2 * u);
+      const t = (index + eased) / hops;
+      px = interpolate(t, [0, 1], [fromX, toX]);
+      ground = interpolate(t, [0, 1], [fromBottom, toBottom]);
+      poseScale = interpolate(t, [0, 1], [fromScale, toScale]);
+      lift = Math.sin(Math.PI * u) * (motion.hopLift ?? 0.05);
+    } else {
+      const raw = interpolate(frame, [start, end], [0, 1], clamp);
+      const t = motion.ease === 'linear' ? raw : raw * raw * (3 - 2 * raw);
+      px = interpolate(t, [0, 1], [fromX, toX]);
+      ground = interpolate(t, [0, 1], [fromBottom, toBottom]);
+      poseScale = interpolate(t, [0, 1], [fromScale, toScale]);
+    }
   }
+  const pBottom = ground + lift;
 
   if (entry.entrance === 'slide-in-right') {
     tx = interpolate(entrance, [0, 1], [Math.max(180, height * 0.35), 0]);
@@ -423,12 +469,13 @@ const CharacterFigure: React.FC<{
         style={{
           position: 'absolute',
           left: `${px * 100}%`,
-          bottom: `${pBottom * 100}%`,
-          width: `${entry.height * 34}%`,
+          bottom: `${ground * 100}%`,
+          width: `${entry.height * 34 * (1 - lift * 6)}%`,
           height: `${entry.height * 5}%`,
           transform: 'translateX(-50%)',
           borderRadius: '50%',
           background: shadowColor,
+          opacity: 1 - lift * 5,
           filter: 'blur(14px)',
         }}
       />
@@ -696,17 +743,30 @@ const BAButton: React.FC<{ btn: ButtonDef; sfx?: string }> = ({ btn, sfx }) => {
   );
 };
 
+// 游戏内的固定打字速度：15 字 / 1s。
+const TYPEWRITER_CHARS_PER_SECOND = 15;
+// 台词出现后略等两帧再开始出字，避免和对话框一起“闪”出来。
+const TYPEWRITER_START_FRAMES = 2;
+
 const DialogueBox: React.FC<{
   speaker: string;
   text: string;
   character?: CharacterData;
   prompt?: boolean;
-}> = ({ speaker, text, character, prompt }) => {
+  lineFrame: number;
+}> = ({ speaker, text, character, prompt, lineFrame }) => {
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
   const appear = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 10 });
   const textOpacity = interpolate(frame, [0, 6], [0, 1], clamp);
   const blink = 0.4 + 0.6 * Math.abs(Math.sin(frame / 10));
+  const glyphs = Array.from(text);
+  const framesPerGlyph = fps / TYPEWRITER_CHARS_PER_SECOND;
+  const visibleGlyphs = Math.min(
+    glyphs.length,
+    Math.max(0, Math.floor((lineFrame - TYPEWRITER_START_FRAMES) / framesPerGlyph) + 1),
+  );
+  const typing = visibleGlyphs < glyphs.length;
 
   return (
     <AbsoluteFill style={{ pointerEvents: 'none' }}>
@@ -796,11 +856,11 @@ const DialogueBox: React.FC<{
           textShadow: '0 2px 10px rgba(0,0,0,0.7)',
         }}
       >
-        {text}
+        {glyphs.slice(0, visibleGlyphs).join('')}
       </div>
 
-      {/* 右下闪烁的青色三角 */}
-      {prompt ? null : (
+      {/* 右下闪烁的青色三角：台词打完才出现，提示可以继续 */}
+      {prompt || typing ? null : (
         <div
           style={{
             position: 'absolute',
@@ -1097,6 +1157,18 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
   const promptSpeaker =
     lastLine?.speaker || (shot.characters[0]?.id ?? '');
 
+  // `holdEmotion` keeps a character in the expression of the last line they
+  // have spoken so far, instead of snapping back to the shot's standing face.
+  const heldEmotionFor = (id: string): string | undefined => {
+    for (let index = shot.lines.length - 1; index >= 0; index -= 1) {
+      const line = shot.lines[index];
+      if (line.speaker === id && frame >= line.from - shot.from) {
+        return line.emotion;
+      }
+    }
+    return undefined;
+  };
+
   const speakingX = activeLine
     ? shot.characters.find((entry) => entry.id === activeLine.speaker)?.x ?? 0.5
     : 0.5;
@@ -1116,6 +1188,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
             entry={entry}
             data={scene.characters[entry.id]}
             activeLine={activeLine}
+            heldEmotion={entry.holdEmotion ? heldEmotionFor(entry.id) : undefined}
             shadowColor="rgba(20,30,45,0.22)"
             shotDuration={shot.durationInFrames}
           />
@@ -1140,6 +1213,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
               speaker={activeLine.speaker}
               text={activeLine.text}
               character={scene.characters[activeLine.speaker]}
+              lineFrame={frame - (activeLine.from - shot.from)}
             />
           ) : shot.choices?.prompt ? (
             <DialogueBox
@@ -1147,6 +1221,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
               speaker={promptSpeaker}
               text={shot.choices.prompt}
               character={scene.characters[promptSpeaker]}
+              lineFrame={frame - (shot.choices.fromFrame ?? 0)}
               prompt
             />
           ) : null}

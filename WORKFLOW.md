@@ -79,12 +79,15 @@ npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-mom
 - `x` 是角色中心横坐标（0–1）；`bottom` 是底部偏移比例；`height` 是画面高度占比；`scale` 是额外缩放。
 - `entrance`：`none` / `fade-in` / `slide-in-left` / `slide-in-right`；滑入是纯平移，没有步伐起伏。
 - `motion`（可选）：镜头内的走位。`fromX` / `toX` 与 `fromBottom` / `toBottom` 是起点和终点的位置比例，`fromScale` / `toScale` 是缩放，`startFrame` / `endFrame` 相对镜头起点（省略时从 0 到镜头结束），`ease` 取 `linear` / `ease-in-out`。省略的起止值取角色当前的 `x` / `bottom` / `scale`。走位只做平移，不模拟走路；走完停在终点，后续镜头沿用同一个 `x` / `bottom`，不要每镜重新漂移。
+- `motion.hops`（可选）：把这段位移拆成几次跳跃，每次向前一截并起落一次，用来演被吓退、蹦跳这类反应；`hopLift` 是每次起跳的高度（相对画面高度，默认 0.05）。`ease` 对跳跃不起作用，落点仍然是 `toX` / `toBottom`，下一镜照样从落点接上。
 - `facing`（可选）：`left` / `right`，默认 `right`（原图方向）；`left` 把立绘水平镜像。
 - `turns`（可选）：转身动画。`to` 是转向后的朝向，`atLine` 写该镜头内的一句台词 id（在该句开始时转身），或写 `startFrame`（相对镜头起点）；`durationInFrames` 默认 6。转身用水平镜像过渡表现，例如 Momoi 从看 Midori 转去看 Kei：
   ```json
   { "id": "saiba-momoi", "facing": "left", "turns": [{ "to": "right", "atLine": "L18", "durationInFrames": 10 }] }
   ```
 - `camera`：`static` / `punch-in` / `push-in` / `pull-back`。
+- `holdEmotion`（可选，默认 `false`）：角色在别人说话时保持自己上一句的表情，不回到 `emotion` 的常驻脸；下一镜重置。适合惊吓、生气这类要延续到对方台词结束的反应，例如 Momoi 被吓到后一直保持 `surprised`，等 Kei 说完才恢复。
+- `emotionCues`（可选）：不等角色开口就能换表情，写 `[{ "emotion": "surprised", "startFrame": 660 }]`（帧相对镜头起点，prepare 会自动加转场帧）。同一时刻有多条时取最后一条；角色正在说话时仍用该句台词的表情。用来在对方台词还没说完时先给出反应表情。
 - 仍然可以用 `background` 兜底：CSS 渐变字符串，或 `{"type":"image","path":"images/xxx.webp"}`（路径相对 `raws/`）。有 `scene` 时优先用场景渲染器。
 - 每个镜头可放多个角色；当前说话人高亮，其他人自动压暗。说话人也可以不在画面里（画外音）。
 - 可选 `choices` 显示浅蓝切面选择条，例如：
@@ -160,6 +163,10 @@ npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-mom
 ### 开头标题卡
 
 `episode.yaml` 里的 `intro` 是可选块：`kicker` 是小标签（实机写作 `Episode 1`，带黄色下划线），`title` 是浅蓝切面带上的深蓝大标题，`durationInFrames` 控制长度。不想要标题卡时直接删掉整个 `intro`，视频会从第一个镜头开始；模板里没有强制标题。`style.watermark` 不渲染。设计 token 见 `docs/UI.md`。
+
+### 台词打字效果
+
+对白区按实机的固定速度逐字显示：15 字 / 1 秒（15 字/秒；30fps 下每 2 帧一个字），台词开始 2 帧后起字。打完之前右下角的青色三角不出现，打完后才闪烁提示继续。`choices.prompt` 同样逐字显示。速度是模板常量 `TYPEWRITER_CHARS_PER_SECOND`，不按句子长短自适应，所以台词的 `durationInFrames` 要够长——validate 只校验字幕长度，不校验打字是否能在句内打完。
 
 ### 背景音乐
 
