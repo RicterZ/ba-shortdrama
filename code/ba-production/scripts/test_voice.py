@@ -44,20 +44,29 @@ class VoiceTests(unittest.TestCase):
             self.assertIsNone(download.kwargs["headers"])
             self.assertEqual(out.read_bytes(), b"mp3-test")
 
-    def test_download_falls_back_to_curl_on_bot_challenge(self):
-        challenge = self._response("text/html", b"<script>EO_Bot_Ssid</script>")
+    def test_download_answers_bot_challenge(self):
+        challenge = self._response(
+            "text/html",
+            b'<script>function a(a){function n(){switch(n[e++]){case"0":t+="EO_Bot_Ssid=";continue;'
+            b'case"3":t=a[_0x649a("0x7")](t,3697606656);continue}}var e={WTKkN:1022526240,bOYDu:675298258,'
+            b'dtzqS:function(a,n){return a+n},wyeCN:99454117,pCQRM:function(a){return a()}},t=0;return t}</script>',
+        )
+        audio = self._response("audio/mpeg", b"ID3audio")
         with tempfile.TemporaryDirectory() as tmp, patch.object(
-            voice.requests, "request", return_value=challenge
-        ), patch.object(voice, "_curl_get", return_value=(b"ID3audio", "")) as curl:
+            voice.requests, "request", side_effect=[challenge, audio]
+        ) as request:
             out = Path(tmp) / "001.mp3"
             out.write_bytes(b"old")
             voice.download_audio("https://cdn.example/a.mp3", out, 30)
-            curl.assert_called_once()
+            self.assertEqual(
+                request.call_args_list[1].kwargs["headers"],
+                {"Cookie": "__tst_status=1797278615#; EO_Bot_Ssid=3697606656"},
+            )
             self.assertEqual(out.read_bytes(), b"ID3audio")
 
         with tempfile.TemporaryDirectory() as tmp, patch.object(
             voice.requests, "request", return_value=challenge
-        ), patch.object(voice, "_curl_get", return_value=(b"<html>", "")), patch.object(voice.time, "sleep"):
+        ), patch.object(voice.time, "sleep"):
             out = Path(tmp) / "001.mp3"
             out.write_bytes(b"old")
             with self.assertRaises(RuntimeError):

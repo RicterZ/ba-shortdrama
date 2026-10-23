@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import json
 import logging
+import re
 import subprocess
 import sys
 import tempfile
@@ -237,37 +238,42 @@ def _is_audio(body: bytes, content_type: str) -> bool:
     return bool(body) and "html" not in content_type and body.lstrip()[:1] != b"<"
 
 
-def _curl_get(url: str, timeout: int) -> tuple[bytes, str]:
-    result = subprocess.run(
-        ["curl", "-sSfL", "--max-time", str(timeout), "-o", "-", url],
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"curl 下载失败：{result.stderr.decode('utf-8', 'replace').strip()}")
-    return result.stdout, ""
+def _bot_challenge_cookie(body: bytes) -> str | None:
+    """Cookie that answers an EdgeOne bot challenge page, or None if the page is not one.
+
+    The page's script sets `__tst_status=<sum of the numbers in `var e={...}`>#`
+    and `EO_Bot_Ssid=<number added in the cookie builder>`, then reloads.
+    """
+    text = body.decode("utf-8", "replace")
+    ssid = re.search(r"EO_Bot_Ssid=.*?\(t,(\d+)\)", text)
+    table = re.search(r"var e=\{(.*?)\},t=0", text)
+    if not ssid or not table:
+        return None
+    status = sum(int(n) for n in re.findall(r"\w+:(\d+)", table.group(1)))
+    return f"__tst_status={status}#; EO_Bot_Ssid={ssid.group(1)}"
 
 
 def fetch_audio(url: str, timeout: int, attempts: int = 3) -> bytes:
     """GET a signed audio URL.
 
-    The 悟声 CDN (EdgeOne) answers Python's TLS client with an HTML bot
-    challenge while curl gets the audio, so fall back to curl.
+    The 悟声 CDN (EdgeOne) answers Python HTTP clients with a JS bot challenge
+    page; solve it and retry with the cookie it would set.
     """
-    body, content_type = _fetch("GET", url, timeout)
+    headers = None
     for attempt in range(1, attempts + 1):
+        if attempt > 2:
+            time.sleep(3 * attempt)
+        body, content_type = _fetch("GET", url, timeout, headers=headers)
         if _is_audio(body, content_type):
-            break
+            return body
         log.warning(
             "download not audio attempt=%d/%d type=%s bytes=%d", attempt, attempts, content_type, len(body)
         )
-        if attempt == attempts:
-            raise RuntimeError(f"下载到的不是音频（{content_type}，{len(body)} 字节）")
-        if attempt > 1:
-            time.sleep(3 * attempt)
-        body, content_type = _curl_get(url, timeout)
-        log.info("curl GET %s bytes=%d", url.split("?")[0], len(body))
-    return body
+        cookie = _bot_challenge_cookie(body)
+        if not cookie:
+            break
+        headers = {"Cookie": cookie}
+    raise RuntimeError(f"下载到的不是音频（{content_type}，{len(body)} 字节）")
 
 
 def download_audio(url: str, target: Path, timeout: int) -> int:
