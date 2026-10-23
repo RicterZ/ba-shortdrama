@@ -96,7 +96,7 @@ def build_timing(
             tts = {"provider": "reused", "voice_id": "", "model": "", "speed": 1.0, "fallback": False}
         else:
             tts = voice.synthesize_line(
-                lib.spoken_text(line), char["voice"], target, timeout, allow_fallback
+                line["text"], char["voice"], target, timeout, allow_fallback
             )
         providers[tts["provider"]] = providers.get(tts["provider"], 0) + 1
         shutil.copy2(target, raws_audio / target.name)

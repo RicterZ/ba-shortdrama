@@ -23,12 +23,11 @@ class VoiceTests(unittest.TestCase):
             "application/json",
             json.dumps({"status": 200, "data": {"audio": "https://cdn.example/audio.mp3", "credit_used": 12}}).encode(),
         )
+        audio = self._response("audio/mpeg", b"mp3-test")
         with tempfile.TemporaryDirectory() as tmp, patch.object(
             lib, "env_value", return_value="secret"
-        ), patch.object(voice.urllib.request, "urlopen") as open_url, patch.object(
-            voice, "_download_audio_bytes", return_value=(b"mp3-test", "audio/mpeg")
-        ) as download_audio:
-            open_url.return_value.__enter__.return_value = metadata
+        ), patch.object(voice.urllib.request, "urlopen") as open_url:
+            open_url.return_value.__enter__.side_effect = [metadata, audio]
             out = Path(tmp) / "test.mp3"
             voice.synth_voice("你好 & test?", {"provider": "vocu", "voice_id": "market:abc", "speed": 1.2}, out, 360)
             request = open_url.call_args_list[0].args[0]
@@ -40,7 +39,9 @@ class VoiceTests(unittest.TestCase):
             self.assertEqual(payload["text"], "你好 & test?")
             self.assertEqual(payload["speechRate"], 1.2)
             self.assertEqual(open_url.call_args_list[0].kwargs["timeout"], 360)
-            download_audio.assert_called_once_with("https://cdn.example/audio.mp3", 360)
+            download = open_url.call_args_list[1].args[0]
+            self.assertEqual(download.full_url, "https://cdn.example/audio.mp3")
+            self.assertIsNone(download.get_header("Authorization"))
             self.assertEqual(out.read_bytes(), b"mp3-test")
 
     def test_vocu_response_validation(self):
@@ -53,10 +54,10 @@ class VoiceTests(unittest.TestCase):
                 voice.synth_vocu("test", {"voice_id": "abc"}, out, 1)
             open_url.return_value.__enter__.side_effect = [
                 self._response("application/json", b'{"data":{"audio":"https://cdn.example/a.mp3"}}'),
+                self._response("audio/mpeg", b""),
             ]
-            with patch.object(voice, "_download_audio_bytes", return_value=(b"", "audio/mpeg")):
-                with self.assertRaises(RuntimeError):
-                    voice.synth_vocu("test", {"voice_id": "abc"}, out, 1)
+            with self.assertRaises(RuntimeError):
+                voice.synth_vocu("test", {"voice_id": "abc"}, out, 1)
 
     def test_missing_key(self):
         with patch.object(lib, "env_value", return_value=""), patch.object(voice.urllib.request, "urlopen") as request:
@@ -78,18 +79,6 @@ class VoiceTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     voice.synth_with_retry("test", cfg, Path(tmp) / "test.mp3", 1, False)
                 self.assertEqual(synth.call_count, 3)
-
-    def test_voice_text_keeps_subtitle(self):
-        script = lib.normalize_script(
-            [
-                {"id": "L1", "speaker": "a", "text": "字幕", "voice_text": " よみあげ  "},
-                {"id": "L2", "speaker": "a", "text": "字幕だけ"},
-            ]
-        )
-        self.assertEqual(script[0]["text"], "字幕")
-        self.assertEqual(lib.spoken_text(script[0]), "よみあげ")
-        self.assertNotIn("voice_text", script[1])
-        self.assertEqual(lib.spoken_text(script[1]), "字幕だけ")
 
     def test_profiles_and_schema(self):
         schema = json.loads((lib.SCHEMAS / "profile.json").read_text())

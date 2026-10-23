@@ -147,7 +147,7 @@ def vocu_sync_synthesize(text: str, voice: dict, key: str, timeout: int) -> byte
         raise RuntimeError(f"Vocu returned no audio URL: {body[:300]!r}")
     log.info("vocu sync ready credit=%s url_host=%s", data.get("credit_used"), urllib.parse.urlsplit(audio_url).hostname)
     # Signed CDN URL: never forward the API key to it.
-    audio, content_type = _download_audio_bytes(audio_url, timeout)
+    audio, content_type = _fetch(urllib.request.Request(audio_url), timeout)
     if "audio" not in content_type or not audio:
         raise RuntimeError(f"Vocu returned empty or non-audio content ({content_type})")
     return audio
@@ -255,33 +255,8 @@ def vocu_async_synthesize(
     return items
 
 
-def _download_audio_bytes(url: str, timeout: int) -> tuple[bytes, str]:
-    """Fetch a signed audio URL with curl.
-
-    The Wusound CDN (EdgeOne) answers Python's TLS fingerprint with a
-    JavaScript bot-challenge page (text/html, ~1KB) even when the User-Agent
-    looks like a browser. curl passes, so signed audio URLs are fetched with
-    curl instead of urllib; the API calls themselves stay on urllib.
-    """
-    with tempfile.NamedTemporaryFile(suffix=".audio", delete=False) as tmp:
-        name = tmp.name
-    try:
-        subprocess.run(
-            ["curl", "-fsSL", "--max-time", str(timeout), "-o", name, url],
-            check=True,
-        )
-        body = Path(name).read_bytes()
-    finally:
-        Path(name).unlink(missing_ok=True)
-    if not body:
-        raise RuntimeError("音频 CDN 返回了空内容")
-    if body.lstrip()[:1] == b"<":
-        raise RuntimeError(f"音频 CDN 返回了 HTML 而不是音频：{body[:120]!r}")
-    return body, "audio/mpeg"
-
-
 def download_audio(url: str, target: Path, timeout: int) -> int:
-    body, _ = _download_audio_bytes(url, timeout)
+    body, _ = _fetch(urllib.request.Request(url), timeout)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(body)
     return len(body)
@@ -585,7 +560,7 @@ def cmd_episode(args: argparse.Namespace) -> int:
             contents = [
                 {
                     "voiceId": char["voice"]["voice_id"],
-                    "text": lib.spoken_text(line),
+                    "text": line["text"],
                     "speechRate": float(char["voice"].get("speed", 1.0)),
                 }
                 for _, line, char, _ in pending
@@ -624,7 +599,7 @@ def cmd_episode(args: argparse.Namespace) -> int:
 
     for index, line, char, target in pending:
         try:
-            tts = synthesize_line(lib.spoken_text(line), char["voice"], target, args.timeout, args.fallback)
+            tts = synthesize_line(line["text"], char["voice"], target, args.timeout, args.fallback)
         except Exception as exc:  # noqa: BLE001
             log.error("line fail id=%s speaker=%s error=%s", line["id"], line["speaker"], exc)
             print(f"  FAIL {line['id']} {line['speaker']}: {exc}")
