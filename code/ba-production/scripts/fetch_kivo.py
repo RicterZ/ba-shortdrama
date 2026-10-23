@@ -31,12 +31,11 @@ import json
 import re
 import sys
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
-from http.cookiejar import CookieJar
 from pathlib import Path
+
+import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lib  # noqa: E402
@@ -108,11 +107,11 @@ def now_iso() -> str:
 def fetch(url: str, timeout: int = 60, retries: int = 3, headers: dict | None = None) -> bytes:
     last: Exception | None = None
     for attempt in range(1, retries + 1):
-        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                return response.read()
-        except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
+            response = requests.get(url, headers={"User-Agent": USER_AGENT, **(headers or {})}, timeout=timeout)
+            response.raise_for_status()
+            return response.content
+        except requests.RequestException as error:
             last = error
             if attempt < retries:
                 time.sleep(2 ** (attempt - 1))
@@ -144,12 +143,9 @@ def download(url: str, dest: Path, force: bool = False) -> dict:
     temporary = dest.with_name(dest.name + ".part")
     digest = hashlib.sha256()
     size = 0
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=120) as response, temporary.open("wb") as handle:
-        while True:
-            chunk = response.read(1 << 20)
-            if not chunk:
-                break
+    with requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=120, stream=True) as response, temporary.open("wb") as handle:
+        response.raise_for_status()
+        for chunk in response.iter_content(1 << 20):
             handle.write(chunk)
             digest.update(chunk)
             size += len(chunk)
@@ -544,14 +540,14 @@ class KivoShare:
     def __init__(self, key: str = SHARE_KEY, password: str = SHARE_PASSWORD) -> None:
         self.key = key
         self.password = password
-        self.jar = CookieJar()
-        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar))
+        self.session = requests.Session()
+        self.session.headers.update({"User-Agent": USER_AGENT, "Referer": f"{SHARE_HOST}/s/{key}"})
         self._unlocked = False
 
     def _request(self, url: str, method: str = "GET") -> dict:
-        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Referer": f"{SHARE_HOST}/s/{self.key}"}, method=method)
-        with self.opener.open(request, timeout=60) as response:
-            payload = json.loads(response.read())
+        response = self.session.request(method, url, timeout=60)
+        response.raise_for_status()
+        payload = response.json()
         if payload.get("code") != 0:
             raise RuntimeError(f"kivo share 返回错误：{payload}")
         return payload.get("data") or {}
@@ -574,13 +570,9 @@ class KivoShare:
     def download_url(self, path: str) -> str:
         self.unlock()
         query = urllib.parse.urlencode({"path": path})
-        request = urllib.request.Request(
-            f"{SHARE_BASE}/share/download/{self.key}?{query}",
-            headers={"User-Agent": USER_AGENT, "Referer": f"{SHARE_HOST}/s/{self.key}"},
-            method="PUT",
-        )
-        with self.opener.open(request, timeout=60) as response:
-            payload = json.loads(response.read())
+        response = self.session.put(f"{SHARE_BASE}/share/download/{self.key}?{query}", timeout=60)
+        response.raise_for_status()
+        payload = response.json()
         if payload.get("code") != 0 or not payload.get("data"):
             raise RuntimeError(f"kivo share 没有返回下载地址：{payload}")
         return payload["data"]

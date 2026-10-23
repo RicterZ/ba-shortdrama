@@ -50,6 +50,7 @@ npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-mom
 
 - `id` 可省略，默认 `L1`、`L2`……
 - `speaker` 必须是 `episode.yaml` 的 `characters` 之一。
+- `voice_text`（可选）：真正送去语音合成的台词；省略时用 `text`。外语配音、中文字幕时把两者分开写（`text` 显示在屏幕上，`voice_text` 只用来配音），字幕长度校验只看 `text`。
 - `emotion` 只是演出意图；有对应表情立绘时换图，没有时回退到该套装的 `default` 立绘并打印警告。静止时不做呼吸、说话抖动等程序化微动；需要动作时在分镜里写 `motion`。
 - 单句字幕上限 26 字/行、2 行，校验脚本会拒绝超长台词。
 - 一句一个说话人，目前不支持两人同时说话。
