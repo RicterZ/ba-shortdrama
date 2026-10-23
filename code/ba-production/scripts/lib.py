@@ -11,33 +11,11 @@ ROOT = Path(__file__).resolve().parents[3]
 ASSETS_ROOT_FILE = ROOT / ".ba-assets-root"
 
 
-def _main_checkout() -> Path:
-    """Primary checkout of this repository; ROOT itself unless ROOT is a git worktree."""
-    dotgit = ROOT / ".git"
-    if not dotgit.is_file():
-        return ROOT
-    text = dotgit.read_text(encoding="utf-8").strip()
-    if not text.startswith("gitdir:"):
-        return ROOT
-    gitdir = Path(text.split(":", 1)[1].strip())
-    if not gitdir.is_absolute():
-        gitdir = ROOT / gitdir
-    commondir = gitdir / "commondir"
-    if not commondir.is_file():
-        return ROOT
-    common = Path(commondir.read_text(encoding="utf-8").strip())
-    if not common.is_absolute():
-        common = gitdir / common
-    main = common.resolve().parent
-    return main if main.is_dir() else ROOT
-
-
 def _assets_root() -> Path:
     """Checkout that holds the shared asset library (`data/`, `local/`).
 
     Order: $BA_ASSETS_ROOT, then the untracked `.ba-assets-root` file at the
-    repository root, then the primary checkout (found through git worktree
-    metadata; the repository root itself when this is not a worktree).
+    repository root, then the repository root itself.
     """
     raw = os.environ.get("BA_ASSETS_ROOT", "").strip()
     source = "BA_ASSETS_ROOT"
@@ -45,7 +23,7 @@ def _assets_root() -> Path:
         raw = ASSETS_ROOT_FILE.read_text(encoding="utf-8").strip()
         source = str(ASSETS_ROOT_FILE)
     if not raw:
-        return _main_checkout()
+        return ROOT
     path = Path(raw).expanduser()
     if not path.is_absolute():
         path = ROOT / path
@@ -58,9 +36,8 @@ def _assets_root() -> Path:
 def _output_root() -> Path:
     """Checkout whose `videos/` holds episode output (script, audio, renders).
 
-    Output is per episode but must live in one place outside git so that it
-    survives branch switches and task worktrees. Order: $BA_OUTPUT_ROOT, then
-    the asset root.
+    Output is per episode and lives outside git so that it survives branch
+    switches. Order: $BA_OUTPUT_ROOT, then the asset root.
     """
     raw = os.environ.get("BA_OUTPUT_ROOT", "").strip()
     if not raw:
