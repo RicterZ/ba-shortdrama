@@ -1026,19 +1026,6 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
   const promptSpeaker =
     lastLine?.speaker || (shot.characters[0]?.id ?? '');
 
-  const progress = interpolate(frame, [0, Math.max(1, shot.durationInFrames)], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const cameraScale =
-    shot.camera === 'push-in'
-      ? 1 + progress * 0.06
-      : shot.camera === 'pull-back'
-        ? 1.07 - progress * 0.06
-        : shot.camera === 'punch-in'
-          ? 1 + Math.min(progress * 1.6, 1) * 0.035
-          : 1;
-
   const speakingX = activeLine
     ? shot.characters.find((entry) => entry.id === activeLine.speaker)?.x ?? 0.5
     : 0.5;
@@ -1046,7 +1033,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
       <SceneBackdrop shot={shot} />
-      <AbsoluteFill style={{ transform: `scale(${cameraScale})`, transformOrigin: '50% 62%' }}>
+      <AbsoluteFill>
         <AbsoluteFill
           style={{
             background: `radial-gradient(circle at ${speakingX * 100}% 46%, rgba(255,255,255,0.16), rgba(255,255,255,0) 52%)`,
