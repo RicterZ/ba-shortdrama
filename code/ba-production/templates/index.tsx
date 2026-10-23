@@ -193,11 +193,11 @@ const Sfx: React.FC<{
 
 // ── Scene backdrop ──────────────────────────────────────────────────────────
 
-const ImageStage: React.FC<{ scene: SceneDef; progress: number }> = ({ scene, progress }) => {
+// Backgrounds are static: no Ken Burns drift, the shot's `camera` is the only
+// thing that may move the frame.
+const ImageStage: React.FC<{ scene: SceneDef }> = ({ scene }) => {
   const p = scene.palette;
   const lighting = scene.lighting || 'day';
-  const drift = interpolate(progress, [0, 1], [-4, 6]);
-  const zoom = 1.035 + progress * 0.015;
 
   return (
     <AbsoluteFill style={{ background: p.ink || '#1a2028', overflow: 'hidden' }}>
@@ -208,7 +208,6 @@ const ImageStage: React.FC<{ scene: SceneDef; progress: number }> = ({ scene, pr
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            transform: `scale(${zoom}) translate(${drift}px, ${-drift * 0.4}px)`,
             filter:
               lighting === 'monitor'
                 ? 'saturate(0.9) brightness(0.82)'
@@ -274,9 +273,9 @@ const GradientBackground: React.FC<{ background?: Shot['background'] }> = ({ bac
   );
 };
 
-const SceneBackdrop: React.FC<{ shot: Shot; progress: number }> = ({ shot, progress }) => {
+const SceneBackdrop: React.FC<{ shot: Shot }> = ({ shot }) => {
   if (shot.scene?.renderer === 'image-stage') {
-    return <ImageStage scene={shot.scene} progress={progress} />;
+    return <ImageStage scene={shot.scene} />;
   }
   return <GradientBackground background={shot.background} />;
 };
@@ -1047,7 +1046,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
       <AbsoluteFill style={{ transform: `scale(${cameraScale})`, transformOrigin: '50% 62%' }}>
-        <SceneBackdrop shot={shot} progress={progress} />
+        <SceneBackdrop shot={shot} />
         <AbsoluteFill
           style={{
             background: `radial-gradient(circle at ${speakingX * 100}% 46%, rgba(255,255,255,0.16), rgba(255,255,255,0) 52%)`,
