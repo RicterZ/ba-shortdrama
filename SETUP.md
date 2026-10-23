@@ -96,7 +96,7 @@ VOCU_API_KEY=...
 
 - 角色 profile 的 `voice.api_key_env` 指向这个变量；脚本只从环境变量或 `local/.env` 读取，不会把 key 写进 `scene.json`、日志或文档。
 - 没有 key 或接口失败时，加 `--voice-fallback` 才会使用 profile 的 `voice.fallback`；默认直接报错，避免悄悄换声线。只尝试一级 fallback。
-- Vocu 配置示例：`{"provider":"vocu","voice_id":"market:88762473-d08e-43e2-8e53-1982511e3707","api_key_env":"VOCU_API_KEY","speed":1.0,"format":"mp3"}`。切换服务时一起修改 provider、voice_id 和 api_key_env；不同服务的音色 ID 不通用。
+- Vocu 配置示例：`{"provider":"vocu","voice_id":"market:88762473-d08e-43e2-8e53-1982511e3707","api_key_env":"VOCU_API_KEY","language":"auto","speed":1.0,"format":"mp3"}`。切换服务时一起修改 provider、voice_id 和 api_key_env；不同服务的音色 ID 不通用。`language` 默认 `auto` 自动识别，日语等外语台词可显式写 `ja`；需要「外语配音 + 中文字幕」时在 `script.json` 里给该句加 `voice_text`。
 - 语音生成统一走 `code/ba-production/scripts/voice.py`，不要临时写 inline 脚本：
 
   ```sh

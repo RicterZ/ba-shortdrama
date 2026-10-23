@@ -31,12 +31,11 @@ import json
 import re
 import sys
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -130,11 +129,11 @@ def now_iso() -> str:
 def fetch(url: str, timeout: int = 120, retries: int = 3) -> bytes:
     last: Exception | None = None
     for attempt in range(1, retries + 1):
-        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                return response.read()
-        except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
+            response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+            response.raise_for_status()
+            return response.content
+        except requests.RequestException as error:
             last = error
             if attempt < retries:
                 time.sleep(2 ** (attempt - 1))

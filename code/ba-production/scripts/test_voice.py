@@ -15,7 +15,8 @@ class VoiceTests(unittest.TestCase):
     def _response(content_type: str, body: bytes) -> MagicMock:
         response = MagicMock()
         response.headers = {"content-type": content_type}
-        response.read.return_value = body
+        response.ok = True
+        response.content = body
         return response
 
     def test_vocu_request(self):
@@ -26,33 +27,32 @@ class VoiceTests(unittest.TestCase):
         audio = self._response("audio/mpeg", b"mp3-test")
         with tempfile.TemporaryDirectory() as tmp, patch.object(
             lib, "env_value", return_value="secret"
-        ), patch.object(voice.urllib.request, "urlopen") as open_url:
-            open_url.return_value.__enter__.side_effect = [metadata, audio]
+        ), patch.object(voice.requests, "request") as open_url:
+            open_url.side_effect = [metadata, audio]
             out = Path(tmp) / "test.mp3"
             voice.synth_voice("你好 & test?", {"provider": "vocu", "voice_id": "market:abc", "speed": 1.2}, out, 360)
-            request = open_url.call_args_list[0].args[0]
-            self.assertEqual(request.get_method(), "POST")
-            self.assertEqual(request.full_url, "https://v1.wusound.cn/api/tts/simple-generate")
-            self.assertEqual(request.get_header("Authorization"), "Bearer secret")
-            payload = json.loads(request.data)
+            request = open_url.call_args_list[0]
+            self.assertEqual(request.args, ("POST", "https://v1.wusound.cn/api/tts/simple-generate"))
+            self.assertEqual(request.kwargs["headers"]["Authorization"], "Bearer secret")
+            payload = json.loads(request.kwargs["data"])
             self.assertEqual(payload["voiceId"], "market:abc")
             self.assertEqual(payload["text"], "你好 & test?")
             self.assertEqual(payload["speechRate"], 1.2)
             self.assertEqual(open_url.call_args_list[0].kwargs["timeout"], 360)
-            download = open_url.call_args_list[1].args[0]
-            self.assertEqual(download.full_url, "https://cdn.example/audio.mp3")
-            self.assertIsNone(download.get_header("Authorization"))
+            download = open_url.call_args_list[1]
+            self.assertEqual(download.args, ("GET", "https://cdn.example/audio.mp3"))
+            self.assertIsNone(download.kwargs["headers"])
             self.assertEqual(out.read_bytes(), b"mp3-test")
 
     def test_vocu_response_validation(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(
             lib, "env_value", return_value="secret"
-        ), patch.object(voice.urllib.request, "urlopen") as open_url:
+        ), patch.object(voice.requests, "request") as open_url:
             out = Path(tmp) / "test.mp3"
-            open_url.return_value.__enter__.side_effect = [self._response("application/json", b"{}")]
+            open_url.side_effect = [self._response("application/json", b"{}")]
             with self.assertRaises(RuntimeError):
                 voice.synth_vocu("test", {"voice_id": "abc"}, out, 1)
-            open_url.return_value.__enter__.side_effect = [
+            open_url.side_effect = [
                 self._response("application/json", b'{"data":{"audio":"https://cdn.example/a.mp3"}}'),
                 self._response("audio/mpeg", b""),
             ]
@@ -60,7 +60,7 @@ class VoiceTests(unittest.TestCase):
                 voice.synth_vocu("test", {"voice_id": "abc"}, out, 1)
 
     def test_missing_key(self):
-        with patch.object(lib, "env_value", return_value=""), patch.object(voice.urllib.request, "urlopen") as request:
+        with patch.object(lib, "env_value", return_value=""), patch.object(voice.requests, "request") as request:
             with self.assertRaisesRegex(RuntimeError, "VOCU_API_KEY"):
                 voice.synth_vocu("test", {"voice_id": "abc"}, Path("unused.mp3"), 1)
             request.assert_not_called()
