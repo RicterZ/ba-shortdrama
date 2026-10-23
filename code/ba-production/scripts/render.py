@@ -60,9 +60,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def chrome_flags() -> list[str]:
-    # The default GPU backend intermittently drops the background and sprite
-    # layers for a single frame in headless renders; software GL does not.
-    flags = [f"--gl={os.environ.get('REMOTION_GL', 'swangle')}"]
+    flags = []
+    if os.environ.get("REMOTION_GL"):
+        flags.append(f"--gl={os.environ['REMOTION_GL']}")
     candidate = os.environ.get("CHROME_PATH")
     path = Path(candidate) if candidate else DEFAULT_CHROME
     if path.is_file():
