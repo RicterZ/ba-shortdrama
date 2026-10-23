@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lib  # noqa: E402
 
 log = logging.getLogger("voice")
-DEFAULT_LOG = lib.ROOT / "local" / "logs" / "voice.log"
+DEFAULT_LOG = lib.ASSETS / "local" / "logs" / "voice.log"
 
 FISH_URL = "https://api.fish.audio/v1/tts"
 # 悟声 (Wusound) API. The public docs live at dev.wusound.cn; the API host is
@@ -139,10 +139,7 @@ def vocu_sync_synthesize(text: str, voice: dict, key: str, timeout: int) -> byte
         raise RuntimeError(f"Vocu returned no audio URL: {body[:300]!r}")
     log.info("vocu sync ready credit=%s url_host=%s", data.get("credit_used"), urllib.parse.urlsplit(audio_url).hostname)
     # Signed CDN URL: never forward the API key to it.
-    audio, content_type = _fetch("GET", audio_url, timeout)
-    if "audio" not in content_type or not audio:
-        raise RuntimeError(f"Vocu returned empty or non-audio content ({content_type})")
-    return audio
+    return fetch_audio(audio_url, timeout)
 
 
 def synth_vocu(text: str, voice: dict, out: Path, timeout: int) -> None:
@@ -236,10 +233,49 @@ def vocu_async_synthesize(
     return items
 
 
+def _is_audio(body: bytes, content_type: str) -> bool:
+    return bool(body) and "html" not in content_type and body.lstrip()[:1] != b"<"
+
+
+def _curl_get(url: str, timeout: int) -> tuple[bytes, str]:
+    result = subprocess.run(
+        ["curl", "-sSfL", "--max-time", str(timeout), "-o", "-", url],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"curl 下载失败：{result.stderr.decode('utf-8', 'replace').strip()}")
+    return result.stdout, ""
+
+
+def fetch_audio(url: str, timeout: int, attempts: int = 3) -> bytes:
+    """GET a signed audio URL.
+
+    The 悟声 CDN (EdgeOne) answers Python's TLS client with an HTML bot
+    challenge while curl gets the audio, so fall back to curl.
+    """
+    body, content_type = _fetch("GET", url, timeout)
+    for attempt in range(1, attempts + 1):
+        if _is_audio(body, content_type):
+            break
+        log.warning(
+            "download not audio attempt=%d/%d type=%s bytes=%d", attempt, attempts, content_type, len(body)
+        )
+        if attempt == attempts:
+            raise RuntimeError(f"下载到的不是音频（{content_type}，{len(body)} 字节）")
+        if attempt > 1:
+            time.sleep(3 * attempt)
+        body, content_type = _curl_get(url, timeout)
+        log.info("curl GET %s bytes=%d", url.split("?")[0], len(body))
+    return body
+
+
 def download_audio(url: str, target: Path, timeout: int) -> int:
-    body, _ = _fetch("GET", url, timeout)
+    body = fetch_audio(url, timeout)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(body)
+    tmp = target.with_suffix(".download" + target.suffix)
+    tmp.write_bytes(body)
+    tmp.replace(target)
     return len(body)
 
 
@@ -469,7 +505,7 @@ def cmd_sample(args: argparse.Namespace) -> int:
         out = Path(args.out).expanduser()
     else:
         stamp = time.strftime("%Y%m%d-%H%M%S")
-        out = lib.ROOT / "local" / "work" / "voice-samples" / f"{args.character}-{stamp}.mp3"
+        out = lib.ASSETS / "local" / "work" / "voice-samples" / f"{args.character}-{stamp}.mp3"
     out.parent.mkdir(parents=True, exist_ok=True)
     log.info("sample character=%s chars=%d out=%s", args.character, len(args.text), out)
     tts = synthesize_line(args.text, char["voice"], out, args.timeout, args.fallback)
@@ -481,7 +517,7 @@ def cmd_sample(args: argparse.Namespace) -> int:
 
 
 def cmd_episode(args: argparse.Namespace) -> int:
-    episode = lib.resolve_episode(args.episode)
+    episode = lib.resolve_episode(args.episode, lock=True)
     _, script, characters, line_outfits = load_episode_plan(episode)
     audio_dir = episode / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
@@ -612,7 +648,7 @@ def cmd_episode(args: argparse.Namespace) -> int:
 
 
 def cmd_retrim(args: argparse.Namespace) -> int:
-    episode = lib.resolve_episode(args.episode)
+    episode = lib.resolve_episode(args.episode, lock=True)
     audio_dir = episode / "audio"
     files = sorted(p for p in audio_dir.glob("[0-9][0-9][0-9].mp3") if p.is_file())
     if not files:

@@ -401,7 +401,7 @@ def outfit_for_line(entry: dict, board: list[dict]) -> str:
 def main() -> int:
     args = parse_args()
 
-    episode = lib.resolve_episode(args.episode)
+    episode = lib.resolve_episode(args.episode, lock=True)
     config = lib.load_json(episode / "episode.yaml")
     script = lib.normalize_script(lib.load_json(episode / "script.json"))
     board = lib.load_json(episode / "storyboard.json").get("shots", [])

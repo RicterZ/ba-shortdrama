@@ -11,12 +11,33 @@ ROOT = Path(__file__).resolve().parents[3]
 ASSETS_ROOT_FILE = ROOT / ".ba-assets-root"
 
 
+def _main_checkout() -> Path:
+    """Primary checkout of this repository; ROOT itself unless ROOT is a git worktree."""
+    dotgit = ROOT / ".git"
+    if not dotgit.is_file():
+        return ROOT
+    text = dotgit.read_text(encoding="utf-8").strip()
+    if not text.startswith("gitdir:"):
+        return ROOT
+    gitdir = Path(text.split(":", 1)[1].strip())
+    if not gitdir.is_absolute():
+        gitdir = ROOT / gitdir
+    commondir = gitdir / "commondir"
+    if not commondir.is_file():
+        return ROOT
+    common = Path(commondir.read_text(encoding="utf-8").strip())
+    if not common.is_absolute():
+        common = gitdir / common
+    main = common.resolve().parent
+    return main if main.is_dir() else ROOT
+
+
 def _assets_root() -> Path:
     """Checkout that holds the shared asset library (`data/`, `local/`).
 
     Order: $BA_ASSETS_ROOT, then the untracked `.ba-assets-root` file at the
-    repository root, then the repository root itself. Episode output
-    (`videos/`, `temp/`) always stays in the current checkout.
+    repository root, then the primary checkout (found through git worktree
+    metadata; the repository root itself when this is not a worktree).
     """
     raw = os.environ.get("BA_ASSETS_ROOT", "").strip()
     source = "BA_ASSETS_ROOT"
@@ -24,7 +45,7 @@ def _assets_root() -> Path:
         raw = ASSETS_ROOT_FILE.read_text(encoding="utf-8").strip()
         source = str(ASSETS_ROOT_FILE)
     if not raw:
-        return ROOT
+        return _main_checkout()
     path = Path(raw).expanduser()
     if not path.is_absolute():
         path = ROOT / path
@@ -34,8 +55,28 @@ def _assets_root() -> Path:
     return path
 
 
+def _output_root() -> Path:
+    """Checkout whose `videos/` holds episode output (script, audio, renders).
+
+    Output is per episode but must live in one place outside git so that it
+    survives branch switches and task worktrees. Order: $BA_OUTPUT_ROOT, then
+    the asset root.
+    """
+    raw = os.environ.get("BA_OUTPUT_ROOT", "").strip()
+    if not raw:
+        return ASSETS
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        path = ROOT / path
+    path = path.resolve()
+    if not path.is_dir():
+        raise SystemExit(f"产物根不存在（来自 BA_OUTPUT_ROOT）：{path}")
+    return path
+
+
 ASSETS = _assets_root()
-VIDEOS = ROOT / "videos"
+OUTPUT = _output_root()
+VIDEOS = OUTPUT / "videos"
 CHARACTERS = ASSETS / "data" / "characters"
 SCENES = ASSETS / "data" / "scenes"
 SCHEMAS = ROOT / "code" / "ba-production" / "schemas"
@@ -104,18 +145,43 @@ def episode_dirs() -> list[Path]:
     return sorted(p for p in VIDEOS.iterdir() if p.is_dir() and not p.name.startswith("."))
 
 
-def resolve_episode(spec: str) -> Path:
-    """Accept an episode id, a relative path, or an absolute path."""
+_EPISODE_LOCKS: list = []
+
+
+def lock_episode(episode: Path) -> None:
+    """Hold an exclusive lock on the episode until this process exits."""
+    import fcntl
+
+    handle = (episode / ".lock").open("a+", encoding="utf-8")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.seek(0)
+        holder = handle.read().strip() or "未知进程"
+        handle.close()
+        raise SystemExit(f"剧集 {episode.name} 正被另一个任务写入（{holder}），等它结束再试")
+    handle.seek(0)
+    handle.truncate()
+    handle.write(f"pid {os.getpid()} @ {ROOT}\n")
+    handle.flush()
+    _EPISODE_LOCKS.append(handle)
+
+
+def resolve_episode(spec: str, lock: bool = False) -> Path:
+    """Accept an episode id, a path relative to the output root, or an absolute path."""
     candidate = Path(spec).expanduser()
     if candidate.is_absolute():
         path = candidate
     elif "/" in spec:
-        path = (ROOT / candidate).resolve()
+        path = (OUTPUT / candidate).resolve()
     else:
         path = VIDEOS / spec
     if not path.is_dir():
         raise SystemExit(f"找不到剧集目录：{path}")
-    return path.resolve()
+    path = path.resolve()
+    if lock:
+        lock_episode(path)
+    return path
 
 
 def read_character(character_id: str) -> dict:

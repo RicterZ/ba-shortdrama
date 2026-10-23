@@ -33,21 +33,23 @@ Python 依赖由仓库根目录的 `pyproject.toml` / `uv.lock` 统一声明，�
 uv sync
 ```
 
-## 资源根（worktree 共用素材）
+## 资源、产物、代码（worktree 怎么共用）
 
-素材库 `data/`（角色、场景、背景、音频、UI 音效）和 `local/`（`.env`、下载缓存）从「资源根」读取；剧集产物 `videos/`、`temp/` 始终写在当前 checkout 里。资源根按以下顺序确定：
+- **资源**：`data/`（角色、场景、背景、音频、UI 音效）、`local/`（`.env`、日志、下载缓存）、`temp/`。全局一份，所有任务共享，从「资源根」读取。
+- **产物**：`videos/<剧集>/`（台本、音频、时间轴、预览和成片）。每集各自一份，但统一写在「产物根」的 `videos/` 下，不进 git，切分支、换 worktree、换 agent 都不会丢。
+- **代码**：只有代码按 worktree 隔离、走分支。
+
+资源根按以下顺序确定：
 
 1. 环境变量 `BA_ASSETS_ROOT`
 2. 仓库根目录的 `.ba-assets-root` 文件（一行路径，已 gitignore）
-3. 仓库根目录本身（主 checkout 不需要任何配置）
+3. 主 checkout：在 git worktree 里时，通过 `.git` 指向的主仓库自动找到；不在 worktree 里就是仓库根目录本身
 
-新 worktree 指向主 checkout 即可，**不要软链** `data`、`local`、`videos` 等目录：
+产物根是环境变量 `BA_OUTPUT_ROOT`，没设时等于资源根。所以 Multica 这类自动创建的 worktree 不需要任何配置，读写的就是主 checkout 的 `data/` 和 `videos/`。**不要软链或复制** `data`、`local`、`videos` 到 worktree，也不要把产物只留在 worktree 里。
 
-```sh
-echo /Users/sakana/Projects/ba-shortdrama > .ba-assets-root
-```
+路径不存在时脚本直接报错退出。
 
-资源根路径不存在时脚本直接报错退出。
+`prepare`、`voice episode`/`retrim`、`render` 运行时会锁住剧集目录（`videos/<剧集>/.lock`，进程退出或被中断时自动释放）。同一集已有任务在写时，第二个任务直接报错退出，不会互相覆盖。
 
 npm 脚本通过 `uv run python` 调用，会自动找到根目录的环境；carocut 升级、`requirements.txt` 变化时，同步修改 `pyproject.toml` 后重新 `uv lock`。
 

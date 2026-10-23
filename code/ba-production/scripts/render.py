@@ -81,7 +81,7 @@ def run(command: list[str]) -> None:
 
 def main() -> int:
     args = parse_args()
-    episode = lib.resolve_episode(args.episode)
+    episode = lib.resolve_episode(args.episode, lock=True)
     scene_path = episode / "project" / "scene.json"
     if not scene_path.is_file():
         raise SystemExit(f"缺少 {scene_path}，先运行 prepare.py")

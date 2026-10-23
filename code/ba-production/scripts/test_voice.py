@@ -44,6 +44,26 @@ class VoiceTests(unittest.TestCase):
             self.assertIsNone(download.kwargs["headers"])
             self.assertEqual(out.read_bytes(), b"mp3-test")
 
+    def test_download_falls_back_to_curl_on_bot_challenge(self):
+        challenge = self._response("text/html", b"<script>EO_Bot_Ssid</script>")
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            voice.requests, "request", return_value=challenge
+        ), patch.object(voice, "_curl_get", return_value=(b"ID3audio", "")) as curl:
+            out = Path(tmp) / "001.mp3"
+            out.write_bytes(b"old")
+            voice.download_audio("https://cdn.example/a.mp3", out, 30)
+            curl.assert_called_once()
+            self.assertEqual(out.read_bytes(), b"ID3audio")
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            voice.requests, "request", return_value=challenge
+        ), patch.object(voice, "_curl_get", return_value=(b"<html>", "")), patch.object(voice.time, "sleep"):
+            out = Path(tmp) / "001.mp3"
+            out.write_bytes(b"old")
+            with self.assertRaises(RuntimeError):
+                voice.download_audio("https://cdn.example/a.mp3", out, 30)
+            self.assertEqual(out.read_bytes(), b"old")
+
     def test_vocu_response_validation(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(
             lib, "env_value", return_value="secret"
