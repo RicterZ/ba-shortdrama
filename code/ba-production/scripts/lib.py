@@ -193,15 +193,23 @@ def normalize_script(script: list[dict]) -> list[dict]:
         text = (entry.get("text") or "").strip()
         if not text:
             raise ValueError(f"台词 {lid} 为空")
-        normalized.append(
-            {
-                "id": lid,
-                "speaker": entry.get("speaker") or "",
-                "emotion": entry.get("emotion") or "default",
-                "text": text,
-            }
-        )
+        line = {
+            "id": lid,
+            "speaker": entry.get("speaker") or "",
+            "emotion": entry.get("emotion") or "default",
+            "text": text,
+        }
+        # 可选：实际送去合成的台词。text 仍是屏幕字幕，voice_text 用于外语配音。
+        spoken = (entry.get("voice_text") or "").strip()
+        if spoken:
+            line["voice_text"] = spoken
+        normalized.append(line)
     return normalized
+
+
+def spoken_text(line: dict) -> str:
+    """Text sent to TTS: voice_text when present, otherwise the subtitle text."""
+    return (line.get("voice_text") or line.get("text") or "").strip()
 
 
 def probe_duration(path: Path) -> float:
