@@ -1045,8 +1045,8 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
 
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
+      <SceneBackdrop shot={shot} />
       <AbsoluteFill style={{ transform: `scale(${cameraScale})`, transformOrigin: '50% 62%' }}>
-        <SceneBackdrop shot={shot} />
         <AbsoluteFill
           style={{
             background: `radial-gradient(circle at ${speakingX * 100}% 46%, rgba(255,255,255,0.16), rgba(255,255,255,0) 52%)`,
