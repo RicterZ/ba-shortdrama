@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "code": "code",
+  "data": "data",
+  "videos": "videos",
+  "default_character": "saiba-momoi",
+  "upstream_commit": "2f8dc102012036a20b1645c2183e680b3e4a8fd4"
+}

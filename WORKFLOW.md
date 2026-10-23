@@ -1,0 +1,201 @@
+# 制作工作流
+
+## 0. 素材准备（可选，前期一次）
+
+新角色、新 BGM、新界面音效从 kivo.wiki 取，细节和 API 契约见 `RESOURCES.md`。
+
+```sh
+cd code/ba-production
+
+# 角色：信息 + 头像 + 表情差分 + Live2D；--portrait 额外取 SchaleDB 平面立绘
+npm run res:kivo -- student 2 --portrait --spine
+
+# 全身表情立绘：全部服装 × 全部表情，自动写入 profile.yaml
+npm run res:sprites -- list Momoi
+npm run res:sprites -- get Momoi
+npm run res:sprites -- get Momoi --contact   # 需要核对表情时生成缩略图总览
+npm run test:sprites                         # 立绘抓取回归：默认表情、缺图失败、不覆盖索引
+
+# BGM / 音效：先查，再取；也可以直接取起步合集
+npm run res:kivo -- music list --match School
+npm run res:kivo -- music preset
+npm run res:kivo -- sfx list --match UI_Button
+npm run res:kivo -- sfx preset
+
+# 核对索引与文件哈希
+npm run res:check
+```
+
+产物：`data/characters/<slug>/kivo/`（信息、头像、差分、spine）、`data/characters/<slug>/sprites/<outfit>/`（全身表情立绘 + manifest）、`data/audio/bgm/`、`data/audio/sfx/`、`data/audio/manifest.json`。`fetch_sprites.py` 会更新 `profile.yaml` 的 `outfits`（不动 persona / voice）；`fetch_kivo.py` 不改 profile，新角色仍需按 `kivo/summary.json` 补人设并确认音色。
+
+## 1. 建一集
+
+```sh
+cd code/ba-production
+npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-momoi
+```
+
+`episode.yaml` 的 `template` 选择渲染模板，默认 `blue-archive`；新建集数可用 `--template blue-archive` 指定。`width` / `height` / `fps` 是画幅与帧率配置，例如竖屏可用 `--width 720 --height 1280`。当前实现提供的模板只有 `blue-archive`，模板决定视觉呈现，画幅尺寸由集数配置决定。
+
+生成 `videos/003-summer-patch/` 骨架和空白的 `script.json`、`storyboard.json`。填完后才能准备。
+
+## 2. 写台词 `script.json`
+
+```json
+[
+  { "id": "L1", "speaker": "saiba-momoi", "emotion": "excited", "text": "老师！我把新作打通关了！" },
+  { "id": "L2", "speaker": "saiba-momoi", "emotion": "confident", "text": "而且顺手，把最终 BOSS 卡进墙里了。" }
+]
+```
+
+- `id` 可省略，默认 `L1`、`L2`……
+- `speaker` 必须是 `episode.yaml` 的 `characters` 之一。
+- `emotion` 只是演出意图；有对应表情立绘时换图，没有时回退到该套装的 `default` 立绘并打印警告。静止时不做呼吸、说话抖动等程序化微动；需要动作时在分镜里写 `motion`。
+- 单句字幕上限 26 字/行、2 行，校验脚本会拒绝超长台词。
+- 一句一个说话人，目前不支持两人同时说话。
+
+## 3. 写分镜 `storyboard.json`
+
+```json
+{
+  "shots": [
+    {
+      "id": "S1",
+      "scene": { "id": "game-dev-room", "variant": "afternoon" },
+      "camera": "push-in",
+      "characters": [
+        { "id": "saiba-momoi", "outfit": "default", "x": 0.66, "height": 0.92, "entrance": "slide-in-right", "emotion": "default" }
+      ],
+      "lines": ["L1", "L2"]
+    }
+  ]
+}
+```
+
+- 台词必须在镜头中按顺序各出现一次，不能漏、不能重复。
+- `scene` 引用 `data/scenes/<id>/scene.yaml`，可写成字符串（用默认变体）或 `{id, variant}`。变体决定光线和墙面色，例如 `afternoon` / `monitor-glow` / `lamp`；切镜时自动换光。
+- `outfit` 选角色 profile 里的服装；省略时用 `default_outfit`。同一角色可以在不同镜头穿不同衣服。
+- `x` 是角色中心横坐标（0–1）；`bottom` 是底部偏移比例；`height` 是画面高度占比；`scale` 是额外缩放。
+- `entrance`：`none` / `fade-in` / `slide-in-left` / `slide-in-right`。
+- `motion`（可选）：镜头内的走位。`fromX` / `toX` 与 `fromBottom` / `toBottom` 是起点和终点的位置比例，`fromScale` / `toScale` 是缩放，`startFrame` / `endFrame` 相对镜头起点（省略时从 0 到镜头结束），`ease` 取 `linear` / `ease-in-out`。省略的起止值取角色当前的 `x` / `bottom` / `scale`。例如 `{"fromX":0.9,"toX":0.83,"ease":"ease-in-out"}` 让角色从画面右侧走到站位。
+- `camera`：`static` / `punch-in` / `push-in` / `pull-back`。
+- 仍然可以用 `background` 兜底：CSS 渐变字符串，或 `{"type":"image","path":"images/xxx.webp"}`（路径相对 `raws/`）。有 `scene` 时优先用场景渲染器。
+- 每个镜头可放多个角色；当前说话人高亮，其他人自动压暗。说话人也可以不在画面里（画外音）。
+- 可选 `choices` 显示浅蓝切面选择条，例如：
+  ```json
+  {
+    "prompt": "现在要怎么做？",
+    "options": ["把这段录下来", "再打一次最终 BOSS"],
+    "selected": 0,
+    "fromFrame": 300,
+    "selectFrame": 340,
+    "hideFrame": 372
+  }
+  ```
+  `fromFrame` / `selectFrame` / `hideFrame` 都相对本镜头起点；`prompt` 在台词结束后显示在对白框里。省略时间字段时分别默认 `0` / `+30` / `+52`。
+- 可选 `buttons` 显示斜切按钮，`pressFrame`（相对镜头）触发按下动画、点击音和点击特效：
+  ```json
+  "buttons": [
+    { "label": "SAVE CLIP", "x": 0.36, "y": 0.68, "width": 0.24, "pressFrame": 130, "variant": "primary" }
+  ]
+  ```
+- `episode.yaml` 的 `ui` 块可以覆盖 UI 音效（`click` / `select` / `hover` 对应 `data/ui/sfx/<name>.wav`）、关闭逐句点击音（`lineClick: false`）或调整音量（`lineClickVolume`）。不写时使用默认三件套。
+- 台词按镜头顺序连续排布；切镜点由 `timing` 参数自动决定，不需要手写帧号。
+
+### 场景 profile
+
+```json
+{
+  "schema_version": 1,
+  "id": "game-dev-room",
+  "name": "游戏开发部活动室",
+  "renderer": "image-stage",
+  "default_variant": "afternoon",
+  "image": "backgrounds/game-dev-room-default.jpg",
+  "palette": { "wallTop": "#f7eadc", "wallBottom": "#e6c9b5", "floor": "#c59b7b", "accent": "#e78caf", "ink": "#241a16" },
+  "variants": {
+    "afternoon": { "lighting": "day", "tint": "#fff4e2" },
+    "monitor-glow": { "lighting": "monitor", "tint": "#8fb8d8", "ink": "#0d1420", "image": "backgrounds/game-dev-room-night.jpg" },
+    "lamp": { "lighting": "lamp", "tint": "#ffd2a1", "ink": "#2b1f1b" }
+  }
+}
+```
+
+`image` 是相对 `data/scenes/<id>/` 的背景图；某个变体可以写自己的 `image` 覆盖它。`palette` 是基础色，`variants` 里的同名键覆盖它，`lighting` 决定模板叠加的冷光、暖光或自然光。**背景图由工作区所有者提供，模板不自行绘制房间**；缺图时 prepare 会警告并用中性底色占位。`renderer` 必须和 `templates/index.tsx` 里实现的渲染器一致，目前只有 `image-stage`。
+
+### 开头标题卡
+
+`episode.yaml` 里的 `intro` 是可选块：`kicker` 是小标签（实机写作 `Episode 1`，带黄色下划线），`title` 是浅蓝切面带上的深蓝大标题，`durationInFrames` 控制长度。不想要标题卡时直接删掉整个 `intro`，视频会从第一个镜头开始；模板里没有强制标题。`style.watermark` 已不再渲染，右上角不会出现角标。设计 token 见 `docs/UI.md`。
+
+### 背景音乐
+
+`episode.yaml` 可以加 `bgm` 块：
+
+```json
+"bgm": { "file": "data/audio/bgm/0003-mischievous-step.ogg", "volume": 0.16, "loop": true, "fadeInFrames": 60, "fadeOutFrames": 90 }
+```
+
+`file` 相对工作区根目录；prepare 会把它复制到 `raws/audio/` 并写入 `scene.bgm`，Remotion 在整片期间循环播放，按 `fadeInFrames` / `fadeOutFrames` 淡入淡出，音量为 `volume`。不写 `bgm` 就没有背景音乐。
+
+## 4. 准备
+
+语音有单独的入口 `scripts/voice.py`（`npm run voice -- ...`），`prepare.py` 内部也调用它，不需要再写临时脚本：
+
+```sh
+cd code/ba-production
+
+# 检查配置、key 和音色是否存在（轻量查询，不合成；--config-only 只查配置，--synthesize 才试音）
+npm run voice -- check
+
+# 单角色试音，默认写到 local/work/voice-samples/
+npm run voice -- sample --character saiba-momoi --text "老师，早上好。"
+
+# 为一集生成全部语音（--only L7,L12 只补指定台词；--reuse 跳过已有文件）
+npm run voice -- episode --episode 003-game-dev-sneak --only L7 --timeout 180
+
+# 主 provider 失败时使用 profile 里的 fallback
+npm run voice -- episode --episode 003-game-dev-sneak --fallback
+```
+
+`voice.py` 负责 provider、重试、首尾静音裁剪和错误码输出；`episode` 只写 `audio/NNN.mp3`，时间轴仍由 prepare 重建。Vocu 整集默认走异步多句接口（`--sync` 可强制逐句同步），`check` 默认只做音色查询、不触发合成。三个 provider 都从各自 profile 的 `voice` 读取，`vocu` 的实际主机是 `https://v1.wusound.cn`（`v1.vocu.ai` 会把有效 key 判成 401，`v1.vocu.com` 没有对应证书）。
+
+```sh
+EPISODE=003-summer-patch npm run ep:prepare
+```
+
+会做四件事：
+
+1. 用 `voice.py` 的同一套 provider 合成 `audio/NNN.mp3`（支持 Vocu / Fish Audio / Edge TTS，可按角色混用；加 `--voice-fallback` 使用该 profile 的备用 provider），复制到 `raws/audio/`。
+2. 裁掉每句首尾静音，再用 ffprobe 实测时长，按 `ceil(时长×fps) + 14 帧` 计算时间轴。
+3. 把本集用到的立绘按服装复制到 `raws/images/`，缺失表情回退到 default 并打印警告；场景背景图也复制进快照，缺图时警告。
+4. 生成 `project/scene.json`（渲染输入）、`audio/timing.json`（可读时间轴）、`assets.lock.json`（素材哈希）。
+
+## 5. 校验
+
+```sh
+npm run ep:validate
+```
+
+检查：schema、角色与音色、台词覆盖与顺序、字幕长度、音频存在与时长达标、时间轴不重叠、scene 与 timing 一致、素材哈希、成片容器与时长。
+
+## 6. 渲染
+
+```sh
+EPISODE=003-summer-patch npm run ep:render
+```
+
+输出 `output/<episode-id>.mp4` 和 `preview/frame-NNNN.png`。默认 1280×720@30；改 `episode.yaml` 的 `width` / `height` / `fps` 后重新准备即可换画幅。
+
+## 7. 审片与发布
+
+- 先看预览帧，再完整看片。`review.json` 记录看过的帧、是否完整听音、缺失项。
+- `publication_approved` 默认 `false`，不要在没有人工确认的情况下改成 `true`。
+- 投稿仍是人工操作；当前没有自动发布，也没有 B 站官方投稿授权。
+- 公开发布前必须确认素材权利，见 `ASSETS.md`。
+
+## 8. 迭代原则
+
+- 改台词 → 重新 prepare（会重新合成语音）→ validate → render。
+- 只改画面/站位/镜头 → `--reuse-audio`，避免重复合成。
+- 新角色：先 `npm run res:kivo -- student <kivo id> --portrait --spine` 拉信息与素材，再 `npm run res:sprites -- get <英文名>` 拉全部服装的全部表情立绘；然后在 `data/characters/<id>/` 建 `profile.yaml`（人设参考 `kivo/summary.json`、`voice` provider/音色、`outfits` 立绘表），由 `profile.json` schema 校验；最后到 `episode.yaml` 的 `characters` 里引用。多套衣服就在 `outfits` 下加条目，分镜用 `outfit` 选择，`emotion` 可用原始索引或已登记的语义别名。
+- 新场景：先从 `data/backgrounds/manifest.json` 选图（或运行 `npm run bg:build` 重建），再在 `data/scenes/<id>/scene.yaml` 建配置，`image` 写相对场景目录的 `backgrounds/<id>-<variant>.jpg`；由 `scene.json` schema 校验，`npm run bg:check` 会核对图片存在、哈希、命名和重复登记。分镜用 `scene` 引用。没有对应 renderer 时先在模板里实现，不要用代码现画房间。

@@ -1,0 +1,27 @@
+# Shared local resources and independently managed repositories.
+/attachments/
+/carocut/
+/code/
+/data/
+/local/
+/temp/
+/videos/
+.cache/
+.DS_Store
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+*.pem
+*.key
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.zip
