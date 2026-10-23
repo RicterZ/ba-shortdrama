@@ -475,7 +475,7 @@ def main() -> int:
     ui_cfg = {**default_ui, **raw_ui_cfg}
     ui_cfg["sfx"] = {**default_ui["sfx"], **(raw_ui_cfg.get("sfx") or {})}
     ui_sfx: dict[str, str] = {}
-    ui_sfx_dir = lib.ASSETS / "data" / "ui" / "sfx"
+    ui_sfx_dir = lib.ROOT / "data" / "ui" / "sfx"
     raw_ui_dir = raws / "audio" / "ui"
     for key, name in ui_cfg["sfx"].items():
         if not name:
@@ -494,7 +494,7 @@ def main() -> int:
         bgm_file = bgm_cfg.get("file")
         if not bgm_file:
             raise SystemExit("bgm 缺少 file")
-        bgm_src = (lib.ASSETS / bgm_file).resolve()
+        bgm_src = (lib.ROOT / bgm_file).resolve()
         if not bgm_src.is_file():
             bgm_src = (episode / bgm_file).resolve()
         if not bgm_src.is_file():

@@ -28,7 +28,7 @@ sys.path.insert(0, str(HERE))
 import fetch_sprites as fs  # noqa: E402
 import lib  # noqa: E402
 
-WORK = lib.ASSETS / "local" / "tmp" / "test-fetch-sprites"
+WORK = lib.ROOT / "local" / "tmp" / "test-fetch-sprites"
 
 PAGE = """
 == Standard ==
@@ -57,7 +57,7 @@ def make_entry(character_dir: Path, outfit: str, key: str) -> dict:
     make_png(path)
     return {
         "key": key,
-        "file": str(path.relative_to(lib.ASSETS)),
+        "file": str(path.relative_to(lib.ROOT)),
         "size": path.stat().st_size,
         "sha256": fs.sha256_file(path),
     }
@@ -183,7 +183,7 @@ def test_missing_file_aborts_without_overwrite() -> list[str]:
                     "sprites": [
                         {
                             "key": "02",
-                            "file": str(ghost.relative_to(lib.ASSETS)),
+                            "file": str(ghost.relative_to(lib.ROOT)),
                             "sha256": "0" * 64,
                         }
                     ],

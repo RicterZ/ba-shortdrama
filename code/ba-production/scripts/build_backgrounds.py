@@ -32,9 +32,9 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lib  # noqa: E402
 
-SOURCE = lib.ASSETS / "temp"
-STAGING = lib.ASSETS / "local" / "backgrounds-library" / "staging"
-MANIFEST = lib.ASSETS / "data" / "backgrounds" / "manifest.json"
+SOURCE = lib.ROOT / "temp"
+STAGING = lib.ROOT / "local" / "backgrounds-library" / "staging"
+MANIFEST = lib.ROOT / "data" / "backgrounds" / "manifest.json"
 
 JPEG_QUALITY = 90
 HD = (1920, 1080)
@@ -254,7 +254,7 @@ def save_background(source: Path, target: Path, size: tuple[int, int]):
 
 def manifest_path_for(target: Path) -> str:
     try:
-        return str(target.resolve().relative_to(lib.ASSETS))
+        return str(target.resolve().relative_to(lib.ROOT))
     except ValueError:
         return str(target.resolve())
 

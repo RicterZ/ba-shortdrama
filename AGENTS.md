@@ -20,8 +20,8 @@ resource docs: `SETUP.md`, `WORKFLOW.md`, `RESOURCES.md`.
     are shared by every task.
   - Episode output (`videos/<episode>/`: script, audio, renders) belongs to
     its episode and survives branch switches because it is outside git.
-  Scripts read and write them under the repository root. Override with
-  `BA_ASSETS_ROOT` / `.ba-assets-root` and `BA_OUTPUT_ROOT` (see `SETUP.md`).
+  Scripts read and write them under the repository root; there is no
+  override.
   Writers (`prepare`, `voice episode`, `render`) lock the episode, so a second
   task writing the same episode stops with an error instead of clobbering it.
 - Never commit secrets from `local/.env`, downloaded media, caches, or dependencies.

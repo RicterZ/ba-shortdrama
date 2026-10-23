@@ -24,7 +24,7 @@ from PIL import Image
 import lib
 
 HERE = Path(__file__).resolve().parent
-ROOT = lib.ASSETS
+ROOT = lib.ROOT
 BUILD = HERE / "build_backgrounds.py"
 WORK = ROOT / "local" / "backgrounds-library" / "test-tmp"
 

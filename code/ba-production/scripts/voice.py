@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lib  # noqa: E402
 
 log = logging.getLogger("voice")
-DEFAULT_LOG = lib.ASSETS / "local" / "logs" / "voice.log"
+DEFAULT_LOG = lib.ROOT / "local" / "logs" / "voice.log"
 
 FISH_URL = "https://api.fish.audio/v1/tts"
 # 悟声 (Wusound) API. The public docs live at dev.wusound.cn; the API host is
@@ -511,7 +511,7 @@ def cmd_sample(args: argparse.Namespace) -> int:
         out = Path(args.out).expanduser()
     else:
         stamp = time.strftime("%Y%m%d-%H%M%S")
-        out = lib.ASSETS / "local" / "work" / "voice-samples" / f"{args.character}-{stamp}.mp3"
+        out = lib.ROOT / "local" / "work" / "voice-samples" / f"{args.character}-{stamp}.mp3"
     out.parent.mkdir(parents=True, exist_ok=True)
     log.info("sample character=%s chars=%d out=%s", args.character, len(args.text), out)
     tts = synthesize_line(args.text, char["voice"], out, args.timeout, args.fallback)

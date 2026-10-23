@@ -8,56 +8,11 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-ASSETS_ROOT_FILE = ROOT / ".ba-assets-root"
-
-
-def _assets_root() -> Path:
-    """Checkout that holds the shared asset library (`data/`, `local/`).
-
-    Order: $BA_ASSETS_ROOT, then the untracked `.ba-assets-root` file at the
-    repository root, then the repository root itself.
-    """
-    raw = os.environ.get("BA_ASSETS_ROOT", "").strip()
-    source = "BA_ASSETS_ROOT"
-    if not raw and ASSETS_ROOT_FILE.is_file():
-        raw = ASSETS_ROOT_FILE.read_text(encoding="utf-8").strip()
-        source = str(ASSETS_ROOT_FILE)
-    if not raw:
-        return ROOT
-    path = Path(raw).expanduser()
-    if not path.is_absolute():
-        path = ROOT / path
-    path = path.resolve()
-    if not path.is_dir():
-        raise SystemExit(f"资源根不存在（来自 {source}）：{path}")
-    return path
-
-
-def _output_root() -> Path:
-    """Checkout whose `videos/` holds episode output (script, audio, renders).
-
-    Output is per episode and lives outside git so that it survives branch
-    switches. Order: $BA_OUTPUT_ROOT, then the asset root.
-    """
-    raw = os.environ.get("BA_OUTPUT_ROOT", "").strip()
-    if not raw:
-        return ASSETS
-    path = Path(raw).expanduser()
-    if not path.is_absolute():
-        path = ROOT / path
-    path = path.resolve()
-    if not path.is_dir():
-        raise SystemExit(f"产物根不存在（来自 BA_OUTPUT_ROOT）：{path}")
-    return path
-
-
-ASSETS = _assets_root()
-OUTPUT = _output_root()
-VIDEOS = OUTPUT / "videos"
-CHARACTERS = ASSETS / "data" / "characters"
-SCENES = ASSETS / "data" / "scenes"
+VIDEOS = ROOT / "videos"
+CHARACTERS = ROOT / "data" / "characters"
+SCENES = ROOT / "data" / "scenes"
 SCHEMAS = ROOT / "code" / "ba-production" / "schemas"
-LOCAL_ENV = ASSETS / "local" / ".env"
+LOCAL_ENV = ROOT / "local" / ".env"
 
 DEFAULT_TIMING = {
     "intro_frames": 60,
@@ -145,12 +100,12 @@ def lock_episode(episode: Path) -> None:
 
 
 def resolve_episode(spec: str, lock: bool = False) -> Path:
-    """Accept an episode id, a path relative to the output root, or an absolute path."""
+    """Accept an episode id, a path relative to the repository root, or an absolute path."""
     candidate = Path(spec).expanduser()
     if candidate.is_absolute():
         path = candidate
     elif "/" in spec:
-        path = (OUTPUT / candidate).resolve()
+        path = (ROOT / candidate).resolve()
     else:
         path = VIDEOS / spec
     if not path.is_dir():
