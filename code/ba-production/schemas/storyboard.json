@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "shots"
+  ],
+  "properties": {
+    "shots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "characters",
+          "lines"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "background": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ]
+              }
+            ]
+          },
+          "scene": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "variant": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          "camera": {
+            "enum": [
+              "static",
+              "punch-in",
+              "push-in",
+              "pull-back"
+            ]
+          },
+          "characters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "outfit": {
+                  "type": "string"
+                },
+                "x": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "bottom": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "height": {
+                  "type": "number",
+                  "minimum": 0.1,
+                  "maximum": 1.5
+                },
+                "scale": {
+                  "type": "number",
+                  "minimum": 0.1,
+                  "maximum": 3
+                },
+                "entrance": {
+                  "enum": [
+                    "none",
+                    "fade-in",
+                    "slide-in-left",
+                    "slide-in-right"
+                  ]
+                },
+                "exit": {
+                  "enum": [
+                    "none",
+                    "fade-out"
+                  ]
+                },
+                "emotion": {
+                  "type": "string"
+                },
+                "facing": {
+                  "enum": [
+                    "left",
+                    "right"
+                  ]
+                },
+                "turns": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "to"
+                    ],
+                    "properties": {
+                      "to": {
+                        "enum": [
+                          "left",
+                          "right"
+                        ]
+                      },
+                      "atLine": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "startFrame": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "durationInFrames": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    }
+                  }
+                },
+                "motion": {
+                  "type": "object",
+                  "properties": {
+                    "fromX": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "toX": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "fromBottom": {
+                      "type": "number",
+                      "minimum": -1,
+                      "maximum": 1
+                    },
+                    "toBottom": {
+                      "type": "number",
+                      "minimum": -1,
+                      "maximum": 1
+                    },
+                    "fromScale": {
+                      "type": "number",
+                      "minimum": 0.1,
+                      "maximum": 3
+                    },
+                    "toScale": {
+                      "type": "number",
+                      "minimum": 0.1,
+                      "maximum": 3
+                    },
+                    "startFrame": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "endFrame": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "ease": {
+                      "enum": [
+                        "linear",
+                        "ease-in-out"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "choices": {
+            "type": "object",
+            "required": [
+              "options"
+            ],
+            "properties": {
+              "prompt": {
+                "type": "string"
+              },
+              "options": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "selected": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fromFrame": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "selectFrame": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "hideFrame": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "buttons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "label"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "x": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "width": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 1
+                },
+                "pressFrame": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "variant": {
+                  "enum": [
+                    "primary",
+                    "secondary"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

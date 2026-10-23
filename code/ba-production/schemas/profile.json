@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "name",
+    "persona",
+    "voice",
+    "default_outfit",
+    "outfits"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name_en": {
+      "type": "string"
+    },
+    "color": {
+      "type": "string"
+    },
+    "persona": {
+      "type": "object",
+      "required": [
+        "fandom",
+        "school",
+        "club",
+        "role"
+      ],
+      "properties": {
+        "fandom": {
+          "type": "string"
+        },
+        "school": {
+          "type": "string"
+        },
+        "club": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "sibling": {
+          "type": "string"
+        },
+        "personality": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "speech": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "writing_rules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "speech_style_note": {
+          "type": "string"
+        }
+      }
+    },
+    "source": {
+      "type": "object"
+    },
+    "voice": {
+      "type": "object",
+      "required": [
+        "provider",
+        "voice_id"
+      ],
+      "properties": {
+        "provider": {
+          "enum": [
+            "fish-audio",
+            "edge-tts",
+            "vocu"
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "voice_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "api_key_env": {
+          "type": "string"
+        },
+        "speed": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2.0
+        },
+        "format": {
+          "type": "string"
+        },
+        "original_actor": {
+          "type": "boolean"
+        },
+        "rights_note": {
+          "type": "string"
+        },
+        "fallback": {
+          "$ref": "#/properties/voice"
+        }
+      }
+    },
+    "default_outfit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "outfits": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "name",
+          "sprites"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sprites": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "path"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "missing": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

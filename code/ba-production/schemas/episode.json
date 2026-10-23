@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "id",
+    "fps",
+    "publication_approved"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string"
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 16
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 16
+    },
+    "template": {
+      "type": "string",
+      "enum": ["blue-archive"]
+    },
+    "fps": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "status": {
+      "type": "string"
+    },
+    "paid_api_budget": {
+      "type": "number",
+      "minimum": 0
+    },
+    "publication_approved": {
+      "type": "boolean"
+    },
+    "intro": {
+      "type": "object",
+      "properties": {
+        "durationInFrames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kicker": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": "string"
+        }
+      }
+    },
+    "style": {
+      "type": "object"
+    },
+    "bgm": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "volume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "loop": {
+          "type": "boolean"
+        },
+        "fadeInFrames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fadeOutFrames": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "subtitle": {
+      "type": "object",
+      "properties": {
+        "max_chars_per_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_lines": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "timing": {
+      "type": "object"
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "kit": {
+          "type": "string"
+        },
+        "sfx": {
+          "type": "object",
+          "properties": {
+            "click": {
+              "type": "string"
+            },
+            "select": {
+              "type": "string"
+            },
+            "hover": {
+              "type": "string"
+            }
+          }
+        },
+        "lineClick": {
+          "type": "boolean"
+        },
+        "lineClickVolume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

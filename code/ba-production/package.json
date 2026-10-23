@@ -1,0 +1,28 @@
+{
+  "name": "ba-production",
+  "private": true,
+  "scripts": {
+    "ep:new": "../carocut/.venv/bin/python scripts/new_episode.py",
+    "ep:prepare": "../carocut/.venv/bin/python scripts/prepare.py --episode $EPISODE",
+    "ep:validate": "../carocut/.venv/bin/python scripts/validate.py --all",
+    "ep:render": "../carocut/.venv/bin/python scripts/render.py --episode $EPISODE",
+    "ep:preview": "../carocut/.venv/bin/python scripts/render.py --episode $EPISODE --profile preview --mode video",
+    "ep:final": "../carocut/.venv/bin/python scripts/render.py --episode $EPISODE --profile final --mode video",
+    "ep:still": "../carocut/.venv/bin/python scripts/render.py --episode $EPISODE --mode still",
+    "res:kivo": "../carocut/.venv/bin/python scripts/fetch_kivo.py",
+    "res:sprites": "../carocut/.venv/bin/python scripts/fetch_sprites.py",
+    "test:sprites": "../carocut/.venv/bin/python scripts/test_fetch_sprites.py",
+    "res:check": "../carocut/.venv/bin/python scripts/fetch_kivo.py check",
+    "bg:build": "../carocut/.venv/bin/python scripts/build_backgrounds.py",
+    "bg:check": "../carocut/.venv/bin/python scripts/check_backgrounds.py",
+    "bg:test": "../carocut/.venv/bin/python scripts/test_backgrounds.py",
+    "voice": "../carocut/.venv/bin/python scripts/voice.py",
+    "voice:check": "../carocut/.venv/bin/python scripts/voice.py check"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.417",
+    "remotion": "4.0.417",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  }
+}
