@@ -1,7 +1,7 @@
-# Shared local resources and independently managed repositories.
+# Shared local resources (not versioned). code/carocut is a submodule.
 /attachments/
 /carocut/
-/code/
+/code/ba-production/local/
 /data/
 /local/
 /temp/
