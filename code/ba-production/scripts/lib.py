@@ -56,6 +56,34 @@ DEFAULT_SUBTITLE = {
     "max_lines": 2,
 }
 
+# Transitions are rendered by @remotion/transitions. New episodes get this block
+# by default; an episode without it never adds a transition (older episodes keep
+# their hard cuts).
+DEFAULT_TRANSITIONS = {
+    "on": "scene-change",
+    "type": "fade",
+    "durationInFrames": 12,
+}
+
+TRANSITION_TYPES = ("fade", "slide", "wipe", "flip", "clock-wipe", "iris", "none")
+
+TRANSITION_DIRECTIONS = {
+    "slide": ("from-left", "from-top", "from-right", "from-bottom"),
+    "wipe": (
+        "from-left",
+        "from-top-left",
+        "from-top",
+        "from-top-right",
+        "from-right",
+        "from-bottom-right",
+        "from-bottom",
+        "from-bottom-left",
+    ),
+    "flip": ("from-left", "from-right", "from-top", "from-bottom"),
+}
+
+TRANSITION_EASINGS = ("linear", "ease-in-out")
+
 VIDEO_EXTS = {".mp4", ".webm", ".mov"}
 
 
@@ -201,6 +229,80 @@ def text_units(text: str) -> float:
 def wrapped_lines(text: str, max_chars: int) -> int:
     units = text_units(text)
     return max(1, math.ceil(units / max_chars))
+
+
+def transition_defaults(spec, config: dict | None) -> dict:
+    """Defaults an episode's `transitions` block applies to one shot's spec.
+
+    A shot that names its own type only inherits the episode duration; a
+    `direction` written for another presentation would not validate.
+    """
+    config = dict(config) if isinstance(config, dict) else {}
+    if not isinstance(spec, (str, dict)):
+        return config
+    explicit_type = spec if isinstance(spec, str) else spec.get("type")
+    if explicit_type:
+        duration = config.get("durationInFrames")
+        return {"durationInFrames": duration} if duration is not None else {}
+    return config
+
+
+def parse_transition(spec, defaults: dict | None = None) -> dict | None:
+    """Normalize a storyboard/episode transition spec into a flat dict.
+
+    Returns None for a hard cut (`type: "none"`). Episode-level defaults fill in
+    any field the spec leaves out. Raises ValueError for anything the template
+    cannot render.
+    """
+    defaults = defaults or {}
+    if isinstance(spec, str):
+        data: dict = {"type": spec}
+    elif isinstance(spec, dict):
+        data = dict(spec)
+    else:
+        raise ValueError(f"transition 必须是字符串或对象，收到 {type(spec).__name__}")
+
+    kind = data.get("type") or defaults.get("type") or DEFAULT_TRANSITIONS["type"]
+    if kind not in TRANSITION_TYPES:
+        raise ValueError(f"未知转场类型 {kind!r}，可选：{', '.join(TRANSITION_TYPES)}")
+    if kind == "none":
+        return None
+
+    merged = {**defaults, **data}
+    duration = merged.get("durationInFrames", DEFAULT_TRANSITIONS["durationInFrames"])
+    if isinstance(duration, bool) or not isinstance(duration, int) or duration <= 0:
+        raise ValueError("transition.durationInFrames 必须是正整数")
+
+    parsed = {"type": kind, "durationInFrames": duration}
+
+    direction = merged.get("direction")
+    if direction is not None:
+        allowed = TRANSITION_DIRECTIONS.get(kind)
+        if allowed is None:
+            raise ValueError(f"转场 {kind} 不支持 direction")
+        if direction not in allowed:
+            raise ValueError(f"转场 {kind} 的 direction 不支持 {direction!r}，可选：{', '.join(allowed)}")
+        parsed["direction"] = direction
+
+    easing = merged.get("easing")
+    if easing is not None:
+        if easing not in TRANSITION_EASINGS:
+            raise ValueError(f"转场 easing 不支持 {easing!r}，可选：{', '.join(TRANSITION_EASINGS)}")
+        parsed["easing"] = easing
+
+    perspective = merged.get("perspective")
+    if perspective is not None:
+        if kind != "flip":
+            raise ValueError("转场 perspective 只用于 flip")
+        parsed["perspective"] = float(perspective)
+
+    fade_out = merged.get("shouldFadeOutExitingScene")
+    if fade_out is not None:
+        if kind != "fade":
+            raise ValueError("转场 shouldFadeOutExitingScene 只用于 fade")
+        parsed["shouldFadeOutExitingScene"] = bool(fade_out)
+
+    return parsed
 
 
 def line_id(entry: dict, index: int) -> str:

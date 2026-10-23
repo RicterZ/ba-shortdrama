@@ -3,6 +3,7 @@ import {
   AbsoluteFill,
   Audio,
   Composition,
+  Easing,
   Img,
   Sequence,
   interpolate,
@@ -12,6 +13,18 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
+import {linearTiming, TransitionSeries} from '@remotion/transitions';
+import type {TransitionPresentation} from '@remotion/transitions';
+import {fade} from '@remotion/transitions/fade';
+import {slide} from '@remotion/transitions/slide';
+import type {SlideDirection} from '@remotion/transitions/slide';
+import {wipe} from '@remotion/transitions/wipe';
+import type {WipeDirection} from '@remotion/transitions/wipe';
+import {flip} from '@remotion/transitions/flip';
+import type {FlipDirection} from '@remotion/transitions/flip';
+import {clockWipe} from '@remotion/transitions/clock-wipe';
+import {iris} from '@remotion/transitions/iris';
+import {none} from '@remotion/transitions/none';
 
 type Palette = Record<string, string>;
 
@@ -99,10 +112,23 @@ type CharacterTurn = {
   durationInFrames: number;
 };
 
+type TransitionType = 'fade' | 'slide' | 'wipe' | 'flip' | 'clock-wipe' | 'iris' | 'none';
+
+/** Transition entering a shot. prepare.py resolves it; `null` means a hard cut. */
+type ShotTransition = {
+  type: TransitionType;
+  durationInFrames: number;
+  direction?: string;
+  easing?: 'linear' | 'ease-in-out';
+  perspective?: number;
+  shouldFadeOutExitingScene?: boolean;
+};
+
 type Shot = {
   id: string;
   from: number;
   durationInFrames: number;
+  transition?: ShotTransition | null;
   scene?: SceneDef | null;
   background?: { type?: string; value?: string; path?: string };
   camera: string;
@@ -174,6 +200,51 @@ const clamp = {
   extrapolateLeft: 'clamp' as const,
   extrapolateRight: 'clamp' as const,
 };
+
+// ── Transitions ─────────────────────────────────────────────────────────────
+
+// The presentation components all take presentation-specific props, so they are
+// widened to a common shape here; each branch passes only its own props.
+type Presentation = TransitionPresentation<Record<string, unknown>>;
+
+const transitionPresentation = (
+  transition: ShotTransition,
+  width: number,
+  height: number,
+): Presentation => {
+  switch (transition.type) {
+    case 'slide':
+      return slide({
+        direction: transition.direction as SlideDirection | undefined,
+      }) as unknown as Presentation;
+    case 'wipe':
+      return wipe({
+        direction: transition.direction as WipeDirection | undefined,
+      }) as unknown as Presentation;
+    case 'flip':
+      return flip({
+        direction: transition.direction as FlipDirection | undefined,
+        perspective: transition.perspective,
+      }) as unknown as Presentation;
+    case 'clock-wipe':
+      return clockWipe({width, height}) as unknown as Presentation;
+    case 'iris':
+      return iris({width, height}) as unknown as Presentation;
+    case 'none':
+      return none() as unknown as Presentation;
+    case 'fade':
+    default:
+      return fade({
+        shouldFadeOutExitingScene: transition.shouldFadeOutExitingScene,
+      }) as unknown as Presentation;
+  }
+};
+
+const transitionTiming = (transition: ShotTransition) =>
+  linearTiming({
+    durationInFrames: transition.durationInFrames,
+    easing: transition.easing === 'ease-in-out' ? Easing.inOut(Easing.ease) : Easing.linear,
+  });
 
 // ── Audio helpers ───────────────────────────────────────────────────────────
 
@@ -871,7 +942,7 @@ const Intro: React.FC<{ intro: NonNullable<Scene['intro']>; scene: Scene }> = ({
     <AbsoluteFill style={{ opacity: fadeOut, overflow: 'hidden', background: '#071019' }}>
       {firstShot ? (
         <AbsoluteFill style={{ opacity: 0.38, filter: 'blur(3px) brightness(0.72)' }}>
-          <SceneBackdrop shot={firstShot} progress={0.1} />
+          <SceneBackdrop shot={firstShot} />
         </AbsoluteFill>
       ) : null}
       <AbsoluteFill
@@ -1088,6 +1159,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
 // ── Root ────────────────────────────────────────────────────────────────────
 
 const BAEpisode: React.FC<Scene> = (scene) => {
+  const {width, height} = useVideoConfig();
   const fontFamily = scene.episode.style?.font_family || 'PingFang SC';
   const ui = scene.ui;
   const introEnd = scene.intro?.durationInFrames ?? 0;
@@ -1111,20 +1183,32 @@ const BAEpisode: React.FC<Scene> = (scene) => {
         />
       ) : null}
 
-      {scene.shots.map((shot) => (
-        <Sequence
-          key={shot.id}
-          from={shot.from}
-          durationInFrames={shot.durationInFrames}
-          name={shot.id}
-        >
-          <ShotView
-            shot={shot}
-            scene={scene}
-            uiStartFrame={scene.intro?.durationInFrames ?? 0}
-          />
-        </Sequence>
-      ))}
+      <TransitionSeries>
+        {scene.shots.flatMap((shot, index) => {
+          const next = scene.shots[index + 1];
+          const sequence = (
+            <TransitionSeries.Sequence
+              key={shot.id}
+              durationInFrames={shot.durationInFrames}
+              name={shot.id}
+            >
+              <ShotView shot={shot} scene={scene} uiStartFrame={introEnd} />
+            </TransitionSeries.Sequence>
+          );
+          if (!next?.transition) return [sequence];
+          // A shot's duration already contains the transition overlap into the
+          // next shot (prepare.py adds it), so the sequences stay in sync with
+          // the absolute line/audio frames.
+          const transition = (
+            <TransitionSeries.Transition
+              key={`${shot.id}-transition`}
+              presentation={transitionPresentation(next.transition, width, height)}
+              timing={transitionTiming(next.transition)}
+            />
+          );
+          return [sequence, transition];
+        })}
+      </TransitionSeries>
 
       {scene.shots.flatMap((shot) =>
         shot.lines.map((line) => (

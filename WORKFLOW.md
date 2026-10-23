@@ -35,7 +35,7 @@ cd code/ba-production
 npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-momoi
 ```
 
-`episode.yaml` 的 `template` 选择渲染模板，默认 `blue-archive`；新建集数可用 `--template blue-archive` 指定。`width` / `height` / `fps` 是画幅与帧率配置，例如竖屏可用 `--width 720 --height 1280`。目前只有 `blue-archive` 模板，模板决定视觉呈现，画幅尺寸由集数配置决定。
+`episode.yaml` 的 `template` 选择渲染模板，默认 `blue-archive`；新建集数可用 `--template blue-archive` 指定。`width` / `height` / `fps` 是画幅与帧率配置，例如竖屏可用 `--width 720 --height 1280`。目前只有 `blue-archive` 模板，模板决定视觉呈现，画幅尺寸由集数配置决定。新建的剧集默认带 `transitions` 块（场景切换加 12 帧 fade），规则见下面「转场」。
 
 生成 `videos/003-summer-patch/` 骨架和空白的 `script.json`、`storyboard.json`。填完后才能准备。
 
@@ -108,6 +108,34 @@ npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-mom
 - `episode.yaml` 的 `ui` 块可以覆盖 UI 音效（`click` / `select` / `hover` 对应 `data/ui/sfx/<name>.wav`）、关闭逐句点击音（`lineClick: false`）或调整音量（`lineClickVolume`）。不写时使用默认三件套。
 - 台词按镜头顺序连续排布；切镜点由 `timing` 参数自动决定，不需要手写帧号。
 
+### 转场
+
+转场由官方 `@remotion/transitions` 渲染，帧号和 padding 全部由 prepare 计算，分镜只需要声明效果。
+
+`episode.yaml` 的 `transitions` 块决定默认行为，新建剧集默认写入：
+
+```json
+"transitions": { "on": "scene-change", "type": "fade", "durationInFrames": 12 }
+```
+
+- `on`：`scene-change`（默认，只在 `scene` 的 id 或 variant 变化时加）/ `every-cut`（每个切点都加）/ `none`（不加，回到硬切）。
+- `type`：`fade` / `slide` / `wipe` / `flip` / `clock-wipe` / `iris` / `none`。`none` 等于不加转场。
+- `durationInFrames`：默认 12；必须短于前后两个镜头，否则 prepare 报错。
+- `direction`（可选）：`slide` 用 `from-left` / `from-top` / `from-right` / `from-bottom`；`wipe` 另有四个斜角方向（`from-top-left` 等）；`flip` 用 `from-left` / `from-right` / `from-top` / `from-bottom`。
+- `easing`：`linear`（默认）/ `ease-in-out`；`perspective` 只用于 `flip`，`shouldFadeOutExitingScene` 只用于 `fade`。
+
+单个镜头可以在 `storyboard.json` 里覆盖，写在**后一个**镜头上（表示进入该镜头的转场）：
+
+```json
+{ "id": "S2", "transition": { "type": "wipe", "durationInFrames": 10, "direction": "from-top-left" }, "scene": "..." }
+```
+
+不需要转场时写 `"transition": "none"`。第一个镜头不能声明转场（片头之前没有内容可叠）。省略 `durationInFrames` 时沿用 `episode.yaml` 的值。
+
+**帧号不用手算，也不会偏移。** prepare 在每个切点插入与转场等长的静音 padding，台词和音频整体后移；`TransitionSeries` 的重叠再把这段时间抵消，所以总时长只增加 Σ转场帧数，画面与音频保持对齐。分镜里的 `choices.fromFrame` / `selectFrame` / `hideFrame`、`buttons.pressFrame`、角色的 `motion.startFrame` / `endFrame`、`turns.startFrame` 都相对镜头内容起点，prepare 会自动加上转场帧；`turns.atLine` 也不用改。想调节奏只改 `durationInFrames`，不要手写帧号。
+
+已完成的旧集数没有 `transitions` 块，行为不变（全部硬切）。要给旧集数补转场，只在 `episode.yaml` 里加这个块并重新 prepare（`--reuse-audio` 即可），不需要改分镜。
+
 ### 场景 profile
 
 ```json
@@ -175,6 +203,7 @@ EPISODE=003-summer-patch npm run ep:prepare
 2. 裁掉每句首尾静音，再用 ffprobe 实测时长，按 `ceil(时长×fps) + 14 帧` 计算时间轴。
 3. 把本集用到的立绘按服装复制到 `raws/images/`，缺失表情回退到 default 并打印警告；场景背景图也复制进快照，缺图时警告。
 4. 生成 `project/scene.json`（渲染输入）、`audio/timing.json`（可读时间轴）、`assets.lock.json`（素材哈希）。
+5. 按 `episode.yaml` 的 `transitions` 在每个切点插入转场 padding，算出各镜头的 `durationInFrames`；台词、音频和镜头内相对帧一起后移，保证不重叠。
 
 ## 5. 校验
 
@@ -182,7 +211,7 @@ EPISODE=003-summer-patch npm run ep:prepare
 npm run ep:validate
 ```
 
-检查：schema、角色与音色、台词覆盖与顺序、字幕长度、音频存在与时长达标、时间轴不重叠、scene 与 timing 一致、素材哈希、成片容器与时长。
+检查：schema、角色与音色、台词覆盖与顺序、字幕长度、音频存在与时长达标、时间轴不重叠、转场定义与镜头连续性、scene 与 timing 一致、素材哈希、成片容器与时长。
 
 ## 6. 渲染
 

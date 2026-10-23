@@ -121,13 +121,50 @@ def build_timing(
     return timed, cursor + timing_cfg["outro_frames"], providers
 
 
+def shot_scene_key(raw: dict, scene_def: dict | None) -> tuple:
+    """What fills the frame, used to decide automatic scene-change cuts."""
+    if scene_def is not None:
+        return ("scene", scene_def["id"], scene_def["variant"])
+    return ("background", json.dumps(raw.get("background"), sort_keys=True, ensure_ascii=False))
+
+
+def resolve_transition(
+    index: int, raw: dict, scene_keys: list[tuple], cfg: dict | None
+) -> dict | None:
+    """Pick the transition entering shot `index`; None means a hard cut."""
+    explicit = raw.get("transition")
+    if explicit is not None:
+        if index == 0:
+            raise SystemExit(f"镜头 {raw['id']} 是第一个镜头，不能声明转场")
+        try:
+            return lib.parse_transition(explicit, lib.transition_defaults(explicit, cfg))
+        except ValueError as exc:
+            raise SystemExit(f"镜头 {raw['id']} 的转场无效：{exc}")
+    if index == 0 or not cfg:
+        return None
+    if not isinstance(cfg, dict):
+        raise SystemExit("episode.yaml 的 transitions 必须是对象")
+    on = cfg.get("on", lib.DEFAULT_TRANSITIONS["on"])
+    if on not in ("scene-change", "every-cut", "none"):
+        raise SystemExit(f"episode.yaml 的 transitions.on 不支持 {on!r}，可选：scene-change / every-cut / none")
+    if on == "none":
+        return None
+    if on == "scene-change" and scene_keys[index] == scene_keys[index - 1]:
+        return None
+    try:
+        return lib.parse_transition({}, cfg)
+    except ValueError as exc:
+        raise SystemExit(f"episode.yaml 的 transitions 配置无效：{exc}")
+
+
 def build_shots(
     board: list[dict],
     timed: list[dict],
     timing_cfg: dict,
     scenes: dict[tuple[str, str | None], dict],
     default_outfits: dict[str, str],
-) -> tuple[list[dict], int]:
+    transitions_cfg: dict | None = None,
+) -> tuple[list[dict], int, dict[str, int]]:
     by_id = {line["id"]: line for line in timed}
     flat: list[str] = []
     for shot in board:
@@ -150,16 +187,88 @@ def build_shots(
         boundaries.append(cut)
     boundaries.append(total)
 
+    # Resolve the scene of every shot up front: an automatic transition depends
+    # on whether the frame content actually changes at the cut.
+    scene_defs: list[dict | None] = []
+    for raw in board:
+        scene_def = None
+        scene_ref = raw.get("scene")
+        if scene_ref:
+            scene_id = scene_ref if isinstance(scene_ref, str) else scene_ref["id"]
+            variant = None if isinstance(scene_ref, str) else scene_ref.get("variant")
+            key = (scene_id, variant)
+            if key not in scenes:
+                scenes[key] = lib.read_scene(scene_id, variant)
+            scene_def = scenes[key]
+        scene_defs.append(scene_def)
+    scene_keys = [shot_scene_key(raw, scene_def) for raw, scene_def in zip(board, scene_defs)]
+
+    # A transition overlaps the tail of the previous shot with the head of this
+    # one, so resolve every cut before laying out the timeline, and reject
+    # transitions that are longer than either neighbour.
+    transitions = [
+        resolve_transition(index, raw, scene_keys, transitions_cfg)
+        for index, raw in enumerate(board)
+    ]
+    for index in range(1, len(board)):
+        spec = transitions[index]
+        if spec is None:
+            continue
+        frames = spec["durationInFrames"]
+        previous = boundaries[index] - boundaries[index - 1]
+        current = boundaries[index + 1] - boundaries[index]
+        if frames >= previous or frames >= current:
+            raise SystemExit(
+                f"镜头 {board[index]['id']} 的转场 {frames} 帧过长："
+                f"上一镜头 {previous} 帧、本镜头 {current} 帧，转场必须短于两者"
+            )
+
+    # Inserting the transition length as silence at each cut keeps dialogue from
+    # overlapping: shot content shifts right by the accumulated padding, while
+    # @remotion/transitions overlaps the shots by exactly the same amount, so the
+    # final duration only grows by the transitions themselves.
+    padding = 0
+    starts: list[int] = []
+    shifts: list[int] = []
+    for index in range(len(board)):
+        spec = transitions[index]
+        overlap = spec["durationInFrames"] if spec else 0
+        padding += overlap
+        shifts.append(padding)
+        starts.append(boundaries[index] + padding - overlap)
+
+    durations: list[int] = []
+    for index in range(len(board)):
+        if index + 1 < len(board):
+            following = transitions[index + 1]
+            durations.append(
+                starts[index + 1]
+                - starts[index]
+                + (following["durationInFrames"] if following else 0)
+            )
+        else:
+            durations.append(boundaries[-1] + padding - starts[index])
+
     shots: list[dict] = []
+    line_shifts: dict[str, int] = {}
     for index, raw in enumerate(board):
-        start, end = boundaries[index], boundaries[index + 1]
-        if end <= start:
+        start = starts[index]
+        duration = durations[index]
+        if duration <= 0:
             raise SystemExit(f"镜头 {raw['id']} 时长为 0，请调整台词或时间参数")
+        # Shot-relative authoring fields (choices, buttons, motion, turns) are
+        # written from the shot's visible start, so they move by the transition
+        # that plays before the shot's own content.
+        lead = shifts[index] - (shifts[index - 1] if index else 0)
+        content_start = boundaries[index] + shifts[index]
+        content_end = boundaries[index + 1] + shifts[index]
         shot_lines = []
         for lid in raw["lines"]:
             line = by_id[lid]
-            if not (start <= line["start"] and line["start"] + line["frames"] <= end):
+            line_from = line["start"] + shifts[index]
+            if not (content_start <= line_from and line_from + line["frames"] <= content_end):
                 raise SystemExit(f"镜头 {raw['id']} 与台词 {lid} 的时间范围重叠，请检查时间参数")
+            line_shifts[lid] = shifts[index]
             shot_lines.append(
                 {
                     "id": line["id"],
@@ -167,7 +276,7 @@ def build_shots(
                     "outfit": line["outfit"],
                     "emotion": line["emotion"],
                     "text": line["text"],
-                    "from": line["start"],
+                    "from": line_from,
                     "durationInFrames": line["frames"],
                     "audio": line["audio"],
                 }
@@ -190,10 +299,10 @@ def build_shots(
                         )
                     start_frame = line["from"] - start
                 else:
-                    start_frame = int(turn.get("startFrame", 0))
-                if not (0 <= start_frame < end - start):
+                    start_frame = int(turn.get("startFrame", 0)) + lead
+                if not (0 <= start_frame < duration):
                     raise SystemExit(
-                        f"镜头 {raw['id']} 角色 {entry['id']} 的转身起点 {start_frame} 超出镜头时长 {end - start} 帧"
+                        f"镜头 {raw['id']} 角色 {entry['id']} 的转身起点 {start_frame} 超出镜头时长 {duration} 帧"
                     )
                 turns.append(
                     {
@@ -202,6 +311,12 @@ def build_shots(
                         "durationInFrames": int(turn.get("durationInFrames", 6)),
                     }
                 )
+            motion = entry.get("motion")
+            if motion:
+                motion = dict(motion)
+                for field in ("startFrame", "endFrame"):
+                    if motion.get(field) is not None:
+                        motion[field] = int(motion[field]) + lead
             characters.append(
                 {
                     "id": entry["id"],
@@ -215,24 +330,18 @@ def build_shots(
                     "emotion": entry.get("emotion", "default"),
                     "facing": facing,
                     "turns": turns,
-                    "motion": entry.get("motion"),
+                    "motion": motion,
                 }
             )
-        scene_def = None
-        scene_ref = raw.get("scene")
-        if scene_ref:
-            scene_id = scene_ref if isinstance(scene_ref, str) else scene_ref["id"]
-            variant = None if isinstance(scene_ref, str) else scene_ref.get("variant")
-            key = (scene_id, variant)
-            if key not in scenes:
-                scenes[key] = lib.read_scene(scene_id, variant)
-            scene_def = scenes[key]
         background = raw.get("background", "#eef6f4")
         if isinstance(background, str):
             background = {"type": "gradient", "value": background}
-        duration = end - start
         choices = raw.get("choices")
         if choices:
+            choices = dict(choices)
+            for field in ("fromFrame", "selectFrame", "hideFrame"):
+                if choices.get(field) is not None:
+                    choices[field] = int(choices[field]) + lead
             for field in ("fromFrame", "selectFrame", "hideFrame"):
                 value = choices.get(field)
                 if value is not None and not (0 <= int(value) < duration):
@@ -246,27 +355,34 @@ def build_shots(
             selected = int(choices.get("selected", 0))
             if not (0 <= selected < len(choices.get("options") or [])):
                 raise SystemExit(f"镜头 {raw['id']} 的 choices.selected 超出选项范围")
-        for button in raw.get("buttons") or []:
+        buttons = raw.get("buttons") or []
+        shifted_buttons = []
+        for button in buttons:
+            button = dict(button)
+            if button.get("pressFrame") is not None:
+                button["pressFrame"] = int(button["pressFrame"]) + lead
             press = button.get("pressFrame")
             if press is not None and not (0 <= int(press) < duration):
                 raise SystemExit(
                     f"镜头 {raw['id']} 的按钮 {button.get('label')!r} pressFrame={press} 超出镜头时长"
                 )
+            shifted_buttons.append(button)
         shots.append(
             {
                 "id": raw["id"],
                 "from": start,
                 "durationInFrames": duration,
-                "scene": scene_def,
+                "transition": transitions[index],
+                "scene": scene_defs[index],
                 "background": background,
                 "camera": raw.get("camera", "static"),
                 "characters": characters,
                 "lines": shot_lines,
                 "choices": choices,
-                "buttons": raw.get("buttons") or [],
+                "buttons": shifted_buttons,
             }
         )
-    return shots, total
+    return shots, boundaries[-1] + padding, line_shifts
 
 
 def outfit_for_line(entry: dict, board: list[dict]) -> str:
@@ -332,13 +448,18 @@ def main() -> int:
         args.voice_fallback,
     )
     scenes: dict[tuple[str, str | None], dict] = {}
-    shots, _ = build_shots(
+    shots, total_frames, line_shifts = build_shots(
         board,
         timed,
         timing_cfg,
         scenes,
         {cid: char["default_outfit"] for cid, char in characters.items()},
+        config.get("transitions"),
     )
+    # Transitions push every line after the cut later; timing.json is the
+    # readable absolute timeline, so it carries the same padding as scene.json.
+    for line in timed:
+        line["start"] += line_shifts.get(line["id"], 0)
 
     raws = episode / "raws"
     (raws / "images").mkdir(parents=True, exist_ok=True)

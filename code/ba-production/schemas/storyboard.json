@@ -63,6 +63,60 @@
               "pull-back"
             ]
           },
+          "transition": {
+            "oneOf": [
+              {
+                "enum": [
+                  "fade",
+                  "slide",
+                  "wipe",
+                  "flip",
+                  "clock-wipe",
+                  "iris",
+                  "none"
+                ]
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "enum": [
+                      "fade",
+                      "slide",
+                      "wipe",
+                      "flip",
+                      "clock-wipe",
+                      "iris",
+                      "none"
+                    ]
+                  },
+                  "durationInFrames": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "direction": {
+                    "type": "string"
+                  },
+                  "easing": {
+                    "enum": [
+                      "linear",
+                      "ease-in-out"
+                    ]
+                  },
+                  "perspective": {
+                    "type": "number",
+                    "minimum": 1
+                  },
+                  "shouldFadeOutExitingScene": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            ]
+          },
           "characters": {
             "type": "array",
             "items": {

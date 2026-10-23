@@ -79,6 +79,7 @@ def main() -> int:
         },
         "subtitle": lib.DEFAULT_SUBTITLE,
         "timing": lib.DEFAULT_TIMING,
+        "transitions": dict(lib.DEFAULT_TRANSITIONS),
     }
     if args.intro_title or args.kicker or args.intro_subtitle:
         config["intro"] = {

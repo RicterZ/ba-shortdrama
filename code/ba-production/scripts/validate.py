@@ -118,6 +118,21 @@ def check_script_and_board(
     max_chars = int(subtitle["max_chars_per_line"])
     max_lines = int(subtitle["max_lines"])
 
+    transitions_cfg = config.get("transitions")
+    if transitions_cfg is not None:
+        if not isinstance(transitions_cfg, dict):
+            report.error("episode.yaml 的 transitions 必须是对象")
+        else:
+            on = transitions_cfg.get("on", lib.DEFAULT_TRANSITIONS["on"])
+            if on not in ("scene-change", "every-cut", "none"):
+                report.error(
+                    f"episode.yaml 的 transitions.on 不支持 {on!r}，可选：scene-change / every-cut / none"
+                )
+            try:
+                lib.parse_transition({}, transitions_cfg)
+            except ValueError as exc:
+                report.error(f"episode.yaml 的 transitions 配置无效：{exc}")
+
     for line in script:
         if line["speaker"] not in characters:
             report.error(f"台词 {line['id']} 的说话人 {line['speaker']!r} 不在 episode.characters 中")
@@ -178,6 +193,15 @@ def check_script_and_board(
                     checked_scenes.add(f"scene:{scene_id}")
                     path = lib.SCENES / scene_id / "scene.yaml"
                     validate_schema(report, f"scenes/{scene_id}/scene.yaml", lib.load_json(path), "scene")
+
+        transition = shot.get("transition")
+        if transition is not None:
+            if index == 0:
+                report.error(f"镜头 {sid} 是第一个镜头，不能声明转场")
+            try:
+                lib.parse_transition(transition, lib.transition_defaults(transition, transitions_cfg))
+            except ValueError as exc:
+                report.error(f"镜头 {sid} 的转场无效：{exc}")
 
         choices = shot.get("choices")
         if choices:
@@ -287,20 +311,45 @@ def check_scene(
         report.error("scene.json 没有镜头")
         return
 
-    expected_start = 0
+    expected_end = 0
+    previous_duration = 0
     seen_lines: list[str] = []
-    for shot in shots:
+    for index, shot in enumerate(shots):
         start = int(shot["from"])
         duration = int(shot["durationInFrames"])
-        if start != expected_start:
-            report.error(f"镜头 {shot.get('id')} 起点 {start} 与上一镜头结束 {expected_start} 不连续")
-        expected_start = start + duration
+        transition = shot.get("transition") or {}
+        if not isinstance(transition, dict):
+            report.error(f"镜头 {shot.get('id')} 的 transition 必须是对象")
+            transition = {}
+        overlap = int(transition.get("durationInFrames") or 0)
+        if transition:
+            if transition.get("type") not in lib.TRANSITION_TYPES:
+                report.error(f"镜头 {shot.get('id')} 使用了未知转场 {transition.get('type')!r}")
+            if overlap <= 0:
+                report.error(f"镜头 {shot.get('id')} 的转场时长必须为正")
+            elif overlap >= duration or overlap >= previous_duration:
+                report.error(
+                    f"镜头 {shot.get('id')} 的转场 {overlap} 帧必须短于相邻镜头"
+                    f"（上一镜头 {previous_duration} 帧、本镜头 {duration} 帧）"
+                )
+        if index == 0:
+            if start != 0:
+                report.error(f"镜头 {shot.get('id')} 起点 {start} 必须是 0")
+        elif start != expected_end - overlap:
+            report.error(
+                f"镜头 {shot.get('id')} 起点 {start} 与上一镜头结束 {expected_end} "
+                f"减去 {overlap} 帧转场后不连续"
+            )
+        expected_end = start + duration
+        previous_duration = duration
         for entry in shot.get("characters") or []:
             cid = entry.get("id")
             if cid not in scene.get("characters", {}):
                 report.error(f"镜头 {shot.get('id')} 引用了 scene 中不存在的角色 {cid}")
         for line in shot.get("lines") or []:
             seen_lines.append(line.get("id"))
+            if int(line.get("from", 0)) < start + overlap:
+                report.error(f"台词 {line.get('id')} 在镜头 {shot.get('id')} 的转场窗口内开始")
             audio = raws / str(line.get("audio", ""))
             if not audio.is_file():
                 report.error(f"台词 {line.get('id')} 的音频缺失：{audio}")
@@ -318,8 +367,8 @@ def check_scene(
             if press is not None and int(press) >= duration:
                 report.error(f"镜头 {shot.get('id')} 的按钮 {button.get('label')!r} pressFrame 超出镜头时长")
 
-    if expected_start != int(scene["episode"]["durationInFrames"]):
-        report.error("scene.json 的镜头时长之和与总时长不一致")
+    if expected_end != int(scene["episode"]["durationInFrames"]):
+        report.error("scene.json 的镜头时间轴与总时长不一致")
     if [lid for lid in seen_lines] != [line["id"] for line in script]:
         report.error("scene.json 的台词覆盖与 script.json 不一致")
 
