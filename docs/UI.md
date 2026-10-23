@@ -1,11 +1,11 @@
 # 剧情 UI 校准
 
-STUD-11 把短剧的剧情 UI 从早期「深蓝面板 + 青色描边」的近似风格，改为按 Blue Archive 实机剧情画面还原的样式，并接入点击音与点击特效。本文记录参考来源、设计 token 和改动位置。
+短剧的剧情 UI 按 Blue Archive 实机剧情画面还原，含点击音与点击特效。本文记录参考来源、设计 token 和实现位置。
 
 ## 参考来源
 
-- **kivo.wiki**（<https://kivo.wiki/>）：按任务要求先查了角色/素材库。它的画廊覆盖角色立绘、Live2D、BGM 等，但没有剧情 UI 截图或 UI 音效接口（`/api/v1/sfx/` 返回 404）。因此 UI 样式改用实机画面确认，音效改用 Blue Archive Wiki 的游戏文件。
-- **Blue Archive 实机剧情录屏**：对白、选择框、`AUTO`/`MENU` 和标题卡逐帧对照。对照图在 `docs/ui-comparison.png`，参考帧分别来自：
+- **kivo.wiki**：没有剧情 UI 截图或 UI 音效接口，因此 UI 样式按实机画面确认，音效取自 Blue Archive Wiki。
+- **Blue Archive 实机剧情录屏**：对白、选择框、`AUTO`/`MENU` 和标题卡逐帧对照，参考帧分别来自：
   - 对白 + `AUTO`/`MENU`：实机剧情画面（16:9 之外的 2.08:1 录屏）；
   - 选择框：实机剧情选择画面；
   - 标题卡：Vol.1「Episode 1 / An Unexpected Alliance」章节标题。
@@ -30,8 +30,6 @@ STUD-11 把短剧的剧情 UI 从早期「深蓝面板 + 青色描边」的近�
 | 下一句指示 | 距底 7% 的右下角青色三角，`#6fe3ff`，宽 `0.026 × height`、高 `0.017 × height`，透明度呼吸闪烁 |
 
 姓名行距底 27%，分割线距底 25%；正文从距顶 76% 起排，避免对白区过低。
-
-当前三集剧情镜头的角色高度为画布 145%，底部偏移 -50%，以裁掉脚部、保留上半身；背景回归样片不改构图。
 
 ### 选择（`ChoiceBox`）
 
@@ -74,8 +72,6 @@ STUD-11 把短剧的剧情 UI 从早期「深蓝面板 + 青色描边」的近�
 - 10 颗菱形火花（青色/白色交替）向外飞出。
 - 按钮点击使用按钮中心为原点；选项确认使用选中条左端为原点，避免遮住文字。
 
-参考补充：BV1q44y1w7r9 第 31 分片（1-2-3 再见，便利屋68）开头 0–3 秒；按实际视频帧确认淡入和标题带比例。
-
 ## 音效
 
 | 文件 | 触发 | 原始文件 | 音量 |
@@ -97,7 +93,7 @@ STUD-11 把短剧的剧情 UI 从早期「深蓝面板 + 青色描边」的近�
 
 版权归 NEXON Games / Yostar；公开或商用前必须核实授权，详见 `data/ui/manifest.json` 的 `rights`。
 
-## 改动位置
+## 实现位置
 
 - `code/ba-production/templates/index.tsx`：`DialogueBox`、`ChoiceBox`、`Intro`、`StoryChrome`、`BAButton`、`ClickBurst`、`ShotView`、`BAEpisode`。
 - `code/ba-production/scripts/prepare.py`：复制 UI 音效、写 `ui` 块、角色 `club`/`school`、按钮和选择时间字段校验。

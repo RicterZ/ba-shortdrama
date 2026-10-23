@@ -1,6 +1,6 @@
 # 素材获取：kivo.wiki（基沃托斯古书馆）
 
-STUD-9 把 kivo.wiki 的资源获取跑通，并落到 `data/` 作为短剧的前期材料准备。全部入口是一个脚本：
+kivo.wiki 的资源获取入口是一个脚本，结果落到 `data/`：
 
 ```sh
 cd code/ba-production
@@ -23,7 +23,7 @@ npm run res:kivo -- <子命令>
 | UI / 剧情 / 战斗音效 | `cloud.kivo.wiki/s/vmIj`（文章 24） | `sfx list/get/preset` | `data/audio/sfx/<原名>.wav` |
 | 音频索引 | 脚本生成 | 自动 | `data/audio/manifest.json` |
 
-kivo 没有剧情 UI 截图或界面布局数据，也没有单独的 UI 音效接口；短剧的 UI 造型按实机画面确认，点击音改从 Blue Archive Wiki 取，记录在 `docs/UI.md` 和 `data/ui/manifest.json`。kivo 的 `UI_*` 音效仍可用于对白推进等场景，但当前 UI 套件使用 `data/ui/sfx/`。
+kivo 没有剧情 UI 截图或界面布局数据，也没有单独的 UI 音效接口；短剧的 UI 造型按实机画面确认，点击音取自 Blue Archive Wiki，记录在 `docs/UI.md` 和 `data/ui/manifest.json`。kivo 的 `UI_*` 音效仍可用于对白推进等场景，但剧情 UI 使用 `data/ui/sfx/`。
 
 kivo 同样不提供平面全身表情立绘（只有 Live2D 和 840×840 脸部裁切）。全身图从 bluearchive.wiki 取，见下一节。
 
@@ -45,7 +45,7 @@ npm run res:sprites -- get Momoi --contact          # 额外生成每套服装�
 
 `get` 的 `page` 可以是角色英文名（自动拼 `/gallery`），也可以是完整页面名。`--slug` 默认从 `kivo/summary.json` 的英文名反查角色目录；没有 kivo 资料时用页面名转 kebab-case。已有文件默认复用，只有缺失文件才下载；`--no-profile` 只更新 `sprites/manifest.json`。
 
-才羽桃（`saiba-momoi`，2026-10-23）：
+才羽桃（`saiba-momoi`）的结果示例：
 
 | 服装 | 目录 | 游戏立绘 ID | 张数 | 索引 |
 |---|---|---|---:|---|
@@ -70,7 +70,7 @@ data/characters/<slug>/profile.yaml          # outfits 由 get 自动重写，pe
 
 - 原始索引（`00`、`diorama_03` 等）是权威键，和 wiki / 游戏资源一一对应。
 - 语义别名（`default`、`happy`、`worried`、`excited`、`shocked`、`sad`、`angry`、`smug` 等）只是短剧的生产约定，方便 `script.json` 的 `emotion` 直接命中；别名来自对缩略图总览的人工目视标注，不是官方表情名。
-- 每套服装的 `default` 由脚本里的 `OUTFIT_DEFAULT_KEYS` 明确指定：标准制服 / 防寒服指向 `00`，武装装指向 `02`，女仆指向 `diorama_00`；不再按文件名顺序自动猜。
+- 每套服装的 `default` 由脚本里的 `OUTFIT_DEFAULT_KEYS` 明确指定：标准制服 / 防寒服指向 `00`，武装装指向 `02`，女仆指向 `diorama_00`。
 
 写入 profile 时路径相对角色目录（`sprites/default/00.png`），和 `lib.read_character` 的解析方式一致；manifest 里则保留项目根相对路径，便于跨目录检索。
 
@@ -79,7 +79,7 @@ data/characters/<slug>/profile.yaml          # outfits 由 get 自动重写，pe
 - 只有 `gallery` 页面列出的索引才会下载；页面没有的服装或表情不会被猜出来。
 - 写索引前会核对页面列出的全部文件：任意一张没有解析到 URL、数量与页面不符，或本地文件缺失 / 哈希不符，脚本都会失败退出，且**不覆盖**已有的 `manifest.json` 和 `profile.yaml`（`missing` 也保持原样）。回归测试：`npm run test:sprites`。
 - 武装 / 防寒服的 `00`–`27` 不是每个编号都是不同表情，部分编号是姿势或状态差分；按需使用，写剧本时优先用语义别名。
-- 表情别名是当前这一版的人工标注；新增角色或 wiki 改版后先跑 `list` + `--contact`，重新核对再补别名。
+- 表情别名是人工标注；新增角色或 wiki 改版后先跑 `list` + `--contact`，核对后再补别名。
 - 图片权利仍属 NEXON / 权利方；wiki 的版权说明见 <https://bluearchive.wiki/wiki/Blue_Archive_Wiki:Copyrights>，公开发布或商用前必须核实。
 
 ## 常用命令
@@ -105,7 +105,7 @@ npm run res:check
 
 `student` 的 `slug` 默认取英文姓名：kivo id 2 → `saiba-momoi`，与现有角色目录一致；皮肤变体会追加 id。`--slug` 可覆盖。
 
-## 已实测的 API 契约（2026-10-23，kivo 1.0.0-beta.43）
+## API 契约（kivo 1.0.0-beta.43）
 
 Base：`https://api.kivo.wiki/api/v1`。响应统一包一层 `{code, codename:"Koyuki", data, message, success}`。图片、音频、spine 在 `https://static.kivo.wiki`，接口返回的 `//static...` 需要补 `https:`。
 
@@ -154,7 +154,7 @@ data/audio/manifest.json                             # 索引：来源、哈希�
 
 ## 立绘的边界（重要）
 
-- kivo 角色页展示的是 **Live2D**：`data/spines/{id}` 给的是 `skel`/`atlas`/2048×2048 图集，不是可以直接放进 `image-stage` 的透明全身 PNG。当前 Remotion 模板没有 Live2D 渲染器，spine 包先作为素材沉淀，后续接 `spine-canvas`/`pixi-spine` 时直接用。
+- kivo 角色页展示的是 **Live2D**：`data/spines/{id}` 给的是 `skel`/`atlas`/2048×2048 图集，不是可以直接放进 `image-stage` 的透明全身 PNG。Remotion 模板没有 Live2D 渲染器，spine 包只作为素材保存。
 - `gallery` 里的「初始立绘差分」「防寒服差分」是 **脸部裁切**（840×840 RGBA），用于对照表情，不能当全身立绘。`summary.json` 里逐张记录了尺寸。
 - 需要平面全身立绘时有两种来源：`--portrait` 从 SchaleDB 取单张默认立绘；要全部服装 × 全部表情时用 `npm run res:sprites -- get <英文名>` 从 bluearchive.wiki 取。
 - `fetch_sprites.py` 会直接把 `outfits` 写进 `profile.yaml`（persona、voice 不动），因此新角色落地时可以先用它铺好立绘，再人工确认音色。若角色还没有 profile，加 `--no-profile` 只入库图片和 manifest。
@@ -178,7 +178,7 @@ BGM 起步合集（`music preset`）：Constant Moderato、Luminous memory、Mis
 
 ## 权利
 
-kivo 是玩家整理的资料站，素材权利仍属《蔚蓝档案》权利方。使用条款见 <https://kivo.wiki/license>。本次只做到「本地技术验证可用」：
+kivo 是玩家整理的资料站，素材权利仍属《蔚蓝档案》权利方。使用条款见 <https://kivo.wiki/license>。
 
 - 不因 kivo 公开可下载就获得再分发、商用或二创授权；
 - 公开发布、打包资源或商业使用前必须核对权利方政策；

@@ -35,7 +35,7 @@ cd code/ba-production
 npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-momoi
 ```
 
-`episode.yaml` 的 `template` 选择渲染模板，默认 `blue-archive`；新建集数可用 `--template blue-archive` 指定。`width` / `height` / `fps` 是画幅与帧率配置，例如竖屏可用 `--width 720 --height 1280`。当前实现提供的模板只有 `blue-archive`，模板决定视觉呈现，画幅尺寸由集数配置决定。
+`episode.yaml` 的 `template` 选择渲染模板，默认 `blue-archive`；新建集数可用 `--template blue-archive` 指定。`width` / `height` / `fps` 是画幅与帧率配置，例如竖屏可用 `--width 720 --height 1280`。目前只有 `blue-archive` 模板，模板决定视觉呈现，画幅尺寸由集数配置决定。
 
 生成 `videos/003-summer-patch/` 骨架和空白的 `script.json`、`storyboard.json`。填完后才能准备。
 
@@ -130,7 +130,7 @@ npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-mom
 
 ### 开头标题卡
 
-`episode.yaml` 里的 `intro` 是可选块：`kicker` 是小标签（实机写作 `Episode 1`，带黄色下划线），`title` 是浅蓝切面带上的深蓝大标题，`durationInFrames` 控制长度。不想要标题卡时直接删掉整个 `intro`，视频会从第一个镜头开始；模板里没有强制标题。`style.watermark` 已不再渲染，右上角不会出现角标。设计 token 见 `docs/UI.md`。
+`episode.yaml` 里的 `intro` 是可选块：`kicker` 是小标签（实机写作 `Episode 1`，带黄色下划线），`title` 是浅蓝切面带上的深蓝大标题，`durationInFrames` 控制长度。不想要标题卡时直接删掉整个 `intro`，视频会从第一个镜头开始；模板里没有强制标题。`style.watermark` 不渲染。设计 token 见 `docs/UI.md`。
 
 ### 背景音乐
 
@@ -162,7 +162,7 @@ npm run voice -- episode --episode 003-game-dev-sneak --only L7 --timeout 180
 npm run voice -- episode --episode 003-game-dev-sneak --fallback
 ```
 
-`voice.py` 负责 provider、重试、首尾静音裁剪和错误码输出；`episode` 只写 `audio/NNN.mp3`，时间轴仍由 prepare 重建。Vocu 整集默认走异步多句接口（`--sync` 可强制逐句同步），`check` 默认只做音色查询、不触发合成。三个 provider 都从各自 profile 的 `voice` 读取，`vocu` 的实际主机是 `https://v1.wusound.cn`（`v1.vocu.ai` 会把有效 key 判成 401，`v1.vocu.com` 没有对应证书）。
+`voice.py` 负责 provider、重试、首尾静音裁剪和错误码输出；`episode` 只写 `audio/NNN.mp3`，时间轴仍由 prepare 重建。Vocu 整集默认走异步多句接口（`--sync` 可强制逐句同步），`check` 默认只做音色查询、不触发合成。三个 provider 都从各自 profile 的 `voice` 读取，`vocu` 的主机是 `https://v1.wusound.cn`。
 
 ```sh
 EPISODE=003-summer-patch npm run ep:prepare
@@ -199,17 +199,17 @@ EPISODE=003-summer-patch npm run ep:final -- --mode video
 
 执行约束：先 validate，再 preview；人工确认后才运行 final。画面修改复用未变更的音频，重新 prepare 和 validate 后重出 preview。静帧单独使用 ep:still，不让视频命令默认附带静帧。
 
-当前 preview 已在 render.py 实现 scale=0.5、every-nth-frame=3、JPEG 70、CRF 28、ultrafast、默认并发 4；不是先渲染高清再压缩。Remotion 按源时间轴采样，并相应降低输出帧率，保留音频和播放时长（末尾允许一个采样间隔的舍入误差）。只降低预览质量，不修改 scene.json、语音或素材；细微动画和快速表情切换仍需正式帧率复核。不要未经测速改成并发 12。render.py 默认 video，并输出单次 Remotion 调用总耗时，不代表已实现分阶段性能分析。
+preview 参数：scale=0.5、every-nth-frame=3、JPEG 70、CRF 28、ultrafast、默认并发 4，直接低规格渲染而不是先出高清再压缩。Remotion 按源时间轴采样并降低输出帧率，保留音频和播放时长（末尾允许一个采样间隔的舍入误差）。预览不修改 scene.json、语音或素材；细微动画和快速表情切换需在 final 复核。`render.py` 默认 `--mode video`，并输出 Remotion 调用总耗时。
 
-final 当前仍只放大画幅，没有自动 60fps 转换；2560×1440/60fps 仍是待实现的交付目标，不能直接改 fps 数字改变片长。
+final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变更帧率，那会改变片长。
 
-排查慢渲染时保留完整进度和退出码，不使用 tail 隐藏日志；记录实际 profile、输出规格、总耗时。未测量前不要把耗时归因于某一个阶段。
+排查慢渲染时保留完整进度和退出码，记录实际 profile、输出规格和总耗时。
 
 ## 7. 审片与发布
 
 - 先看预览帧，再完整看片。`review.json` 记录看过的帧、是否完整听音、缺失项。
 - `publication_approved` 默认 `false`，不要在没有人工确认的情况下改成 `true`。
-- 投稿仍是人工操作；当前没有自动发布，也没有 B 站官方投稿授权。
+- 投稿是人工操作，没有自动发布。
 - 公开发布前必须确认素材权利，见 `ASSETS.md`。
 
 ## 8. 迭代原则

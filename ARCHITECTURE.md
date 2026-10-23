@@ -60,12 +60,12 @@ BGM 由 `episode.yaml` 的 `bgm` 块经 prepare 进入 scene.json；kivo 的 spi
 - 通过 `calculateMetadata` 从 `episode` props 读取 `durationInFrames` / `fps` / `width` / `height`。
 - 渲染命令用 `--props <该集>/project/scene.json` 和 `--public-dir <该集>/raws`，因此模板完全不知道剧集目录，新增剧集不改代码。
 - 每个镜头是一个 `Sequence`；场景、角色、字幕、运镜都从 scene 数据生成。
-- `image-stage` 场景读取 `data/scenes/<id>/backgrounds/` 下的背景图，按变体叠加冷光/暖光、暗角和轻微推拉；模板不自行绘制房间。缺图时用场景 profile 的中性底色占位并警告。`game-dev-room` 使用背景库中的日/夜两张图（源自 `temp/学校相关.zip`，已按 16:9 裁切）。
-- 对白按游戏内实机样式：底部渐变压暗，白字姓名 + 青色社团名 + 细分割线 + 白字台词 + 右下闪烁青色三角，不再画深蓝面板。`intro` 是可选的 BA 风格标题卡（全宽浅蓝切面带、`Episode N` + 黄色下划线 + 深蓝大标题），删掉 `episode.yaml` 的 `intro` 就不会出现。
-- 分镜可选的 `choices` 会渲染成浅蓝切面圆角选择条（深蓝居中文字、白色描边、选中发光），出现/确认/消失由 `fromFrame` / `selectFrame` / `hideFrame` 控制；`buttons` 渲染斜切按钮并支持 `pressFrame` 点击。
+- `image-stage` 场景读取 `data/scenes/<id>/backgrounds/` 下的背景图，按变体叠加冷光/暖光、暗角和轻微推拉；模板不自行绘制房间。缺图时用场景 profile 的中性底色占位并警告。
+- 对白按游戏内实机样式：底部渐变压暗，白字姓名 + 青色社团名 + 细分割线 + 白字台词 + 右下闪烁青色三角，`intro` 是可选的 BA 风格标题卡（全宽浅蓝切面带、`Episode N` + 黄色下划线 + 深蓝大标题），删掉 `episode.yaml` 的 `intro` 就不会出现。
+- 分镜可选的 `choices` 会渲染成浅蓝切面平行四边形选择条（深蓝居中文字），出现/确认/消失由 `fromFrame` / `selectFrame` / `hideFrame` 控制；`buttons` 渲染斜切按钮并支持 `pressFrame` 点击。
 - 点击音与点击特效：对白推进、选项出现/确认、按钮按下播放 `ui.sfx` 里的 BA 音效；按钮和选项确认同时触发扩散虚线圆环 + 菱形火花。音效来源与许可见 `data/ui/manifest.json`，token 见 `docs/UI.md`。
-- 右上角水印已移除；合成语音/非官方同人说明保留在 `review.json` 和项目文档里，发布时放在视频简介，不再压在画面上。
-- 角色按 `outfit` 取对应立绘；说话人高亮、其他人压暗；没有独立表情图时按 `emotion` 做微动（兴奋跳动、惊讶抖动、自信倾斜、担忧下沉）。
+- 画面不压水印；合成语音/非官方同人说明放在 `review.json` 和视频简介里。
+- 角色按 `outfit` 取对应立绘；说话人高亮、其他人压暗；没有对应表情图时用该服装的 `default` 立绘，不做程序化微动。
 - 音轨按台词各自 `Sequence` 挂载，帧号来自实测音频时长，不手写。
 
 ## scene.json
@@ -114,7 +114,7 @@ BGM 由 `episode.yaml` 的 `bgm` 块经 prepare 进入 scene.json；kivo 的 spi
 }
 ```
 
-`fallbacks` 记录哪些表情用了 default 立绘，模板据此启用程序化微动而不是假装有表情图。
+`fallbacks` 记录哪些表情回退到了 default 立绘。
 
 ## 硬边界
 
