@@ -11,6 +11,7 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -24,14 +25,15 @@ DEFAULT_CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chr
 
 
 PROFILES = {
-    # Fast review cut: same 720p composition, JPEG frame capture + low bitrate.
+    # Review renders fewer, smaller frames without changing source timing.
     "preview": {
         "suffix": "-preview",
-        "scale": "1",
+        "scale": "0.5",
+        "frame_step": 3,
         "crf": "28",
-        "preset": "veryfast",
-        "concurrency": 8,
-        "image": ["--image-format=jpeg", "--jpeg-quality=90"],
+        "preset": "ultrafast",
+        "concurrency": 4,
+        "image": ["--image-format=jpeg", "--jpeg-quality=70"],
     },
     # Delivery cut: 2x output scale, high-quality encode. Review first, then render final.
     "final": {"suffix": "", "scale": "2", "crf": "14", "preset": "slow", "concurrency": 4, "image": []},
@@ -41,7 +43,7 @@ PROFILES = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="渲染一集成片或预览帧")
     parser.add_argument("--episode", required=True)
-    parser.add_argument("--mode", choices=["video", "still", "both"], default="both")
+    parser.add_argument("--mode", choices=["video", "still", "both"], default="video")
     parser.add_argument("--frame", action="append", type=int, default=[], help="预览帧，可重复")
     parser.add_argument(
         "--profile",
@@ -64,7 +66,11 @@ def chrome_flags() -> list[str]:
 
 def run(command: list[str]) -> None:
     print(">", " ".join(str(part) for part in command))
-    subprocess.run([str(part) for part in command], cwd=BA_PRODUCTION, check=True)
+    started = time.monotonic()
+    try:
+        subprocess.run([str(part) for part in command], cwd=BA_PRODUCTION, check=True)
+    finally:
+        print(f"Render elapsed: {time.monotonic() - started:.2f}s", flush=True)
 
 
 def main() -> int:
@@ -95,6 +101,7 @@ def main() -> int:
                 f"--scale={profile['scale']}",
                 f"--crf={profile['crf']}",
                 f"--x264-preset={profile['preset']}",
+                f"--every-nth-frame={profile.get('frame_step', 1)}",
                 *profile.get("image", []),
             ]
         concurrency = args.concurrency if args.concurrency is not None else (profile or {}).get("concurrency", 2)
