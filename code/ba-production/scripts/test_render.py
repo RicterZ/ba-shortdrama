@@ -13,8 +13,17 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(5400 / 30, (5400 / profile['frame_step']) / 10)
 
     def test_default_only_video(self):
-        with patch.object(sys, 'argv', ['render.py', '--episode', 'test']):
+        with patch.object(sys, 'argv', ['render.py', '--episode', 'test', '--profile', 'preview']):
             self.assertEqual(render.parse_args().mode, 'video')
+
+    def test_video_requires_profile(self):
+        with patch.object(sys, 'argv', ['render.py', '--episode', 'test']):
+            with patch('sys.stderr'), self.assertRaises(SystemExit):
+                render.parse_args()
+
+    def test_still_without_profile(self):
+        with patch.object(sys, 'argv', ['render.py', '--episode', 'test', '--mode', 'still']):
+            self.assertIsNone(render.parse_args().profile)
 
     def test_failure_propagates(self):
         import subprocess
