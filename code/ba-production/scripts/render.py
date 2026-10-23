@@ -2,8 +2,8 @@
 """Render an episode with Remotion using its generated scene.json props.
 
 Examples:
-    ../carocut/.venv/bin/python scripts/render.py --episode 002-hidden-ending
-    ../carocut/.venv/bin/python scripts/render.py --episode 002-hidden-ending --mode still --frame 120
+    uv run python scripts/render.py --episode 002-hidden-ending --profile preview
+    uv run python scripts/render.py --episode 002-hidden-ending --mode still --frame 120
 """
 from __future__ import annotations
 
@@ -49,11 +49,14 @@ def parse_args() -> argparse.Namespace:
         "--profile",
         choices=sorted(PROFILES),
         default=None,
-        help="preview：快速低码率审片；final：高分辨率成片。省略时沿用默认参数",
+        help="preview：快速低码率审片；final：高分辨率成片。渲染视频时必填",
     )
     parser.add_argument("--concurrency", type=int, default=None)
     parser.add_argument("--out", default="", help="成片文件名，默认 <episode-id>[-preview].mp4")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.mode in ("video", "both") and args.profile is None:
+        parser.error("渲染视频需要 --profile preview 或 --profile final（用 npm run ep:preview / ep:final）")
+    return args
 
 
 def chrome_flags() -> list[str]:
@@ -91,20 +94,18 @@ def main() -> int:
         raise SystemExit(f"找不到 Remotion：{REMOTION}，先在 code/ba-production 运行 npm install")
 
     if args.mode in ("video", "both"):
-        profile = PROFILES.get(args.profile) if args.profile else None
-        suffix = profile["suffix"] if profile else ""
+        profile = PROFILES[args.profile]
+        suffix = profile["suffix"]
+        encode_flags = [
+            f"--scale={profile['scale']}",
+            f"--crf={profile['crf']}",
+            f"--x264-preset={profile['preset']}",
+            f"--every-nth-frame={profile.get('frame_step', 1)}",
+            *profile.get("image", []),
+        ]
         output = episode / "output" / (args.out or f"{episode.name}{suffix}.mp4")
         output.parent.mkdir(parents=True, exist_ok=True)
-        encode_flags: list[str] = []
-        if profile:
-            encode_flags = [
-                f"--scale={profile['scale']}",
-                f"--crf={profile['crf']}",
-                f"--x264-preset={profile['preset']}",
-                f"--every-nth-frame={profile.get('frame_step', 1)}",
-                *profile.get("image", []),
-            ]
-        concurrency = args.concurrency if args.concurrency is not None else (profile or {}).get("concurrency", 2)
+        concurrency = args.concurrency if args.concurrency is not None else profile["concurrency"]
         run(
             [
                 REMOTION,

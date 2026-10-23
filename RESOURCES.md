@@ -5,7 +5,7 @@ kivo.wiki 的资源获取入口是一个脚本，结果落到 `data/`：
 ```sh
 cd code/ba-production
 npm run res:kivo -- <子命令>
-# 等价于 ../carocut/.venv/bin/python scripts/fetch_kivo.py <子命令>
+# 等价于 uv run python scripts/fetch_kivo.py <子命令>
 ```
 
 脚本只做拉取、校验、索引，不改剧本、不渲染。下载是幂等的：已有文件默认复用，`--force` 才重下。

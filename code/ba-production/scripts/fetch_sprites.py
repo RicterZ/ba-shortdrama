@@ -18,10 +18,10 @@ entry per outfit so the existing prepare/render path can use any expression by
 key (and `default` always points at the neutral `00` sprite).
 
 Examples:
-    ../carocut/.venv/bin/python scripts/fetch_sprites.py list Momoi
-    ../carocut/.venv/bin/python scripts/fetch_sprites.py get Momoi
-    ../carocut/.venv/bin/python scripts/fetch_sprites.py get Momoi --slug saiba-momoi --no-profile
-    ../carocut/.venv/bin/python scripts/fetch_sprites.py get Momoi --contact
+    uv run python scripts/fetch_sprites.py list Momoi
+    uv run python scripts/fetch_sprites.py get Momoi
+    uv run python scripts/fetch_sprites.py get Momoi --slug saiba-momoi --no-profile
+    uv run python scripts/fetch_sprites.py get Momoi --contact
 """
 from __future__ import annotations
 

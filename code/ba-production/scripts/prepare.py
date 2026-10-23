@@ -4,8 +4,8 @@
 Voice providers are bound per character profile (API keys live in local/.env).
 
 Example:
-    ../carocut/.venv/bin/python scripts/prepare.py --episode 002-hidden-ending
-    ../carocut/.venv/bin/python scripts/prepare.py --episode 001-momoi-pilot --reuse-audio
+    uv run python scripts/prepare.py --episode 002-hidden-ending
+    uv run python scripts/prepare.py --episode 001-momoi-pilot --reuse-audio
 """
 from __future__ import annotations
 

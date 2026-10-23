@@ -2,7 +2,7 @@
 """Create a structured, empty episode directory.
 
 Example:
-    ../carocut/.venv/bin/python scripts/new_episode.py 003-summer-patch \
+    uv run python scripts/new_episode.py 003-summer-patch \
         --title "夏日补丁" --characters saiba-momoi --kicker "GAME DEVELOPMENT DEPARTMENT"
 """
 from __future__ import annotations
@@ -107,9 +107,9 @@ def main() -> int:
     print("下一步：")
     print(f"  1. 编辑 {episode / 'script.json'}：每句台词包含 speaker / emotion / text")
     print(f"  2. 编辑 {episode / 'storyboard.json'}：镜头引用台词 id")
-    print(f"  3. ../carocut/.venv/bin/python scripts/prepare.py --episode {args.episode_id}")
-    print(f"  4. ../carocut/.venv/bin/python scripts/validate.py --episode {args.episode_id}")
-    print(f"  5. ../carocut/.venv/bin/python scripts/render.py --episode {args.episode_id}")
+    print(f"  3. uv run python scripts/prepare.py --episode {args.episode_id}")
+    print(f"  4. uv run python scripts/validate.py --episode {args.episode_id}")
+    print(f"  5. uv run python scripts/render.py --episode {args.episode_id}")
     return 0
 
 

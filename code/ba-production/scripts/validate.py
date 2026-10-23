@@ -2,8 +2,8 @@
 """Validate episode data, timing, assets and rendered output.
 
 Examples:
-    ../carocut/.venv/bin/python scripts/validate.py --episode 002-hidden-ending
-    ../carocut/.venv/bin/python scripts/validate.py --all
+    uv run python scripts/validate.py --episode 002-hidden-ending
+    uv run python scripts/validate.py --all
 """
 from __future__ import annotations
 

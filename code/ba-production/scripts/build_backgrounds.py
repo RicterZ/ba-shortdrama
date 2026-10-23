@@ -13,8 +13,8 @@ never upscaled except for a handful of off-size originals, which the manifest
 flags as anomalies.
 
 Examples:
-    ../carocut/.venv/bin/python scripts/build_backgrounds.py
-    ../carocut/.venv/bin/python scripts/build_backgrounds.py --inventory-only
+    uv run python scripts/build_backgrounds.py
+    uv run python scripts/build_backgrounds.py --inventory-only
 """
 from __future__ import annotations
 

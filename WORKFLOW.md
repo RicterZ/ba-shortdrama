@@ -189,10 +189,18 @@ npm run ep:validate
 
 ```sh
 # 快速预览：半尺寸、每 3 帧采样一次（720p/30fps 源输出 640×360/10fps），ultrafast 编码
-EPISODE=003-summer-patch npm run ep:preview -- --mode video
+EPISODE=003-summer-patch npm run ep:preview
 
 # 审片通过后：2x 输出尺寸、高质量编码，输出 output/<episode-id>.mp4
-EPISODE=003-summer-patch npm run ep:final -- --mode video
+EPISODE=003-summer-patch npm run ep:final
+```
+
+视频只有 `ep:preview` 和 `ep:final` 两个入口，`render.py` 渲染视频时必须指定 `--profile`。耗时基准（M1 Ultra，003-game-dev-sneak，6744 帧 / 3 分 45 秒）：整集 preview 约 133 秒。
+
+只想看某一段时，不要按段渲染，先出整集 preview，再用 ffmpeg 从中切出片段（秒级，画面和声音与整集一致）：
+
+```sh
+ffmpeg -ss 120 -to 150 -i videos/<episode-id>/output/<episode-id>-preview.mp4 -c copy clip.mp4
 ```
 
 两个阶段共用同一份 `project/scene.json` 和时间轴，预览阶段不要改素材或重新生成语音。`preview/frame-NNNN.png` 用来抽查单帧。默认 1280×720@30；改 `episode.yaml` 的 `width` / `height` / `fps` 后重新准备即可换画幅。

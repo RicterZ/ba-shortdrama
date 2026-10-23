@@ -16,8 +16,24 @@ git submodule update --init
 - Node.js 18+
 - ffmpeg / ffprobe
 - Google Chrome：`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
-- Python：使用 `code/carocut/.venv`，其中已安装 `edge-tts`、`jsonschema`、`Pillow`
-- `code/ba-production/node_modules`：Remotion 4.0.417、React 19
+- [uv](https://docs.astral.sh/uv/)
+- `code/ba-production/node_modules`：Remotion 4.0.417、React 19，在该目录下 `npm ci` 安装
+
+新 checkout 的完整初始化：
+
+```sh
+git submodule update --init
+uv sync
+(cd code/ba-production && npm ci)
+```
+
+Python 依赖由仓库根目录的 `pyproject.toml` / `uv.lock` 统一声明，包括 `ba-production` 自己用的包和 carocut `requirements.txt` 里的包。环境装在仓库根目录的 `.venv`（不进版本库），每个 checkout 各一份，uv 全局缓存让重复安装很快：
+
+```sh
+uv sync
+```
+
+npm 脚本通过 `uv run python` 调用，会自动找到根目录的环境；carocut 升级、`requirements.txt` 变化时，同步修改 `pyproject.toml` 后重新 `uv lock`。
 
 ## 常用命令
 
@@ -45,7 +61,7 @@ EPISODE=003-summer-patch npm run ep:still -- --frame 120
 直接调用脚本也可以：
 
 ```sh
-code/carocut/.venv/bin/python code/ba-production/scripts/prepare.py --episode 002-hidden-ending
+uv run python code/ba-production/scripts/prepare.py --episode 002-hidden-ending
 ```
 
 ## API key
@@ -83,7 +99,7 @@ VOCU_API_KEY=...
 ```sh
 cd code/carocut
 ../../local/tools/node_modules/.bin/opencode serve --hostname 127.0.0.1 --port 4096
-source .venv/bin/activate
+source ../../.venv/bin/activate
 PORT=3300 pnpm dev
 ```
 

@@ -19,7 +19,7 @@ EPISODE=002-hidden-ending npm run ep:final       # 审片通过后出高质量�
 EPISODE=002-hidden-ending npm run ep:still -- --frame 120   # 单独抽帧（可选）
 ```
 
-正式流程：prepare → validate → preview → 人工审片 → final。`ep:render` 是不带 profile 的兼容入口，不要用于新集。
+正式流程：prepare → validate → preview → 人工审片 → final。
 
 新建一集：
 

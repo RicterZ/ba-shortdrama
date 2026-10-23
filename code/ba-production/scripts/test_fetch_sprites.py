@@ -12,7 +12,7 @@ Covers the two review findings:
 No network access: wiki/API/download calls are replaced with fixtures.
 
 Example:
-    ../carocut/.venv/bin/python scripts/test_fetch_sprites.py
+    uv run python scripts/test_fetch_sprites.py
 """
 from __future__ import annotations
 

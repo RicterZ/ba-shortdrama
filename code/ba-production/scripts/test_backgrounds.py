@@ -8,7 +8,7 @@ keep the valid entries, and record the duplicate / excluded / damaged files
 with their source archive, file name and byte size.
 
 Example:
-    ../carocut/.venv/bin/python scripts/test_backgrounds.py
+    uv run python scripts/test_backgrounds.py
 """
 from __future__ import annotations
 

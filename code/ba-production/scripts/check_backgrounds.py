@@ -7,7 +7,7 @@ that no image is registered twice, and that every `data/scenes/<id>/scene.yaml`
 passes `schemas/scene.json` and only points at registered backgrounds.
 
 Examples:
-    ../carocut/.venv/bin/python scripts/check_backgrounds.py
+    uv run python scripts/check_backgrounds.py
 """
 from __future__ import annotations
 

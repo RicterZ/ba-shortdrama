@@ -15,13 +15,13 @@ sprite, so `student --portrait` optionally pulls the SchaleDB portrait that
 matches the kivo English given name. See `RESOURCES.md` for the full contract.
 
 Examples:
-    ../carocut/.venv/bin/python scripts/fetch_kivo.py student list --name 才羽
-    ../carocut/.venv/bin/python scripts/fetch_kivo.py student 2 --portrait
-    ../carocut/.venv/bin/python scripts/fetch_kivo.py music list --match School
-    ../carocut/.venv/bin/python scripts/fetch_kivo.py music preset
-    ../carocut/.venv/bin/python scripts/fetch_kivo.py sfx list --match UI_Button
-    ../carocut/.venv/bin/python scripts/fetch_kivo.py sfx preset
-    ../carocut/.venv/bin/python scripts/fetch_kivo.py check
+    uv run python scripts/fetch_kivo.py student list --name 才羽
+    uv run python scripts/fetch_kivo.py student 2 --portrait
+    uv run python scripts/fetch_kivo.py music list --match School
+    uv run python scripts/fetch_kivo.py music preset
+    uv run python scripts/fetch_kivo.py sfx list --match UI_Button
+    uv run python scripts/fetch_kivo.py sfx preset
+    uv run python scripts/fetch_kivo.py check
 """
 from __future__ import annotations
 
