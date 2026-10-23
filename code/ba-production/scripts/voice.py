@@ -42,13 +42,6 @@ FISH_URL = "https://api.fish.audio/v1/tts"
 VOCU_SYNC_URL = "https://v1.wusound.cn/api/tts/simple-generate"
 VOCU_ASYNC_URL = "https://v1.wusound.cn/api/tts/generate"
 VOCU_API = "https://v1.wusound.cn/api"
-# The signed audio URLs sit behind EdgeOne bot protection: the default
-# Python-urllib User-Agent gets a JavaScript challenge page (text/html, ~1KB)
-# instead of the MP3. Send a browser UA on every request.
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-)
 
 
 def setup_logging(path: str | None) -> Path | None:
@@ -162,8 +155,6 @@ def synth_vocu(text: str, voice: dict, out: Path, timeout: int) -> None:
 
 def _fetch(request: urllib.request.Request, timeout: int) -> tuple[bytes, str]:
     """Return (body, content-type); surface API and connection errors with context."""
-    if not request.has_header("User-agent"):
-        request.add_header("User-Agent", USER_AGENT)
     started = time.time()
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
