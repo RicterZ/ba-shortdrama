@@ -8,11 +8,38 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
+ASSETS_ROOT_FILE = ROOT / ".ba-assets-root"
+
+
+def _assets_root() -> Path:
+    """Checkout that holds the shared asset library (`data/`, `local/`).
+
+    Order: $BA_ASSETS_ROOT, then the untracked `.ba-assets-root` file at the
+    repository root, then the repository root itself. Episode output
+    (`videos/`, `temp/`) always stays in the current checkout.
+    """
+    raw = os.environ.get("BA_ASSETS_ROOT", "").strip()
+    source = "BA_ASSETS_ROOT"
+    if not raw and ASSETS_ROOT_FILE.is_file():
+        raw = ASSETS_ROOT_FILE.read_text(encoding="utf-8").strip()
+        source = str(ASSETS_ROOT_FILE)
+    if not raw:
+        return ROOT
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        path = ROOT / path
+    path = path.resolve()
+    if not path.is_dir():
+        raise SystemExit(f"资源根不存在（来自 {source}）：{path}")
+    return path
+
+
+ASSETS = _assets_root()
 VIDEOS = ROOT / "videos"
-CHARACTERS = ROOT / "data" / "characters"
-SCENES = ROOT / "data" / "scenes"
+CHARACTERS = ASSETS / "data" / "characters"
+SCENES = ASSETS / "data" / "scenes"
 SCHEMAS = ROOT / "code" / "ba-production" / "schemas"
-LOCAL_ENV = ROOT / "local" / ".env"
+LOCAL_ENV = ASSETS / "local" / ".env"
 
 DEFAULT_TIMING = {
     "intro_frames": 60,

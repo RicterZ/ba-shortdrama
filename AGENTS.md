@@ -15,4 +15,8 @@ resource docs: `SETUP.md`, `WORKFLOW.md`, `RESOURCES.md`.
 - `data`, `videos`, `attachments`, `local`, and `temp` under the repository
   root are local resources and are not versioned. A fresh clone does not have
   them; they live only in the primary checkout on the production machine.
+  In another checkout, point scripts at the shared asset library with
+  `BA_ASSETS_ROOT` or an untracked `.ba-assets-root` file (see `SETUP.md`);
+  `data/` and `local/` are read from there, `videos/` and `temp/` are
+  written in the current checkout. Do not symlink these directories.
 - Never commit secrets from `local/.env`, downloaded media, caches, or dependencies.

@@ -58,10 +58,10 @@ SCHALEDB_PORTRAIT = (
     "https://raw.githubusercontent.com/SchaleDB/SchaleDB/main/images/student/portrait/{id}.webp"
 )
 
-AUDIO_DIR = lib.ROOT / "data" / "audio"
+AUDIO_DIR = lib.ASSETS / "data" / "audio"
 AUDIO_MANIFEST = AUDIO_DIR / "manifest.json"
 CHARACTERS = lib.CHARACTERS
-CACHE = lib.ROOT / "local" / "cache" / "kivo"
+CACHE = lib.ASSETS / "local" / "cache" / "kivo"
 
 RIGHTS = (
     "kivo.wiki 整理的《蔚蓝档案》游戏素材；未核实再分发或商用许可，"
@@ -157,7 +157,7 @@ def download(url: str, dest: Path, force: bool = False) -> dict:
 
 
 def relative(path: Path) -> str:
-    return str(path.relative_to(lib.ROOT))
+    return str(path.relative_to(lib.ASSETS))
 
 
 # ── kivo student data ───────────────────────────────────────────────────────
@@ -382,7 +382,7 @@ def fetch_student(spec: str, *, slug: str = "", portrait: bool = False, spine: b
     if diffs:
         print(f"  表情差分：{len(assets['expressions'])} 张（仅脸部裁切）")
     if assets["flat_portrait"]:
-        print(f"  平面立绘：{relative(Path(lib.ROOT / assets['flat_portrait']['path']))}")
+        print(f"  平面立绘：{relative(Path(lib.ASSETS / assets['flat_portrait']['path']))}")
     return summary_path
 
 
@@ -687,7 +687,7 @@ def check_manifest() -> int:
         for field in ("id", "kind", "path", "sha256", "size", "source"):
             if field not in entry:
                 errors.append(f"{label} 缺少字段 {field}")
-        path = lib.ROOT / str(entry.get("path", ""))
+        path = lib.ASSETS / str(entry.get("path", ""))
         if not path.is_file():
             errors.append(f"{label} 文件不存在：{entry.get('path')}")
             continue

@@ -22,7 +22,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lib  # noqa: E402
 
-MANIFEST = lib.ROOT / "data" / "backgrounds" / "manifest.json"
+MANIFEST = lib.ASSETS / "data" / "backgrounds" / "manifest.json"
 REQUIRED = (
     "id", "scene_id", "name", "category", "variant", "lighting",
     "source_zip", "source_file", "path", "width", "height", "crop", "sha256", "tags",
@@ -94,7 +94,7 @@ def check_manifest(report: Report, manifest: dict) -> dict[str, dict]:
             report.error(f"同一张图被登记为不同条目：{by_sha[digest]} 与 {entry['path']}")
         by_sha[digest] = entry["path"]
 
-        image_path = lib.ROOT / entry["path"]
+        image_path = lib.ASSETS / entry["path"]
         if not image_path.is_file():
             report.error(f"背景图不存在：{entry['path']}")
             continue
@@ -189,15 +189,15 @@ def check_scene_profiles(report: Report, by_path: dict[str, dict]) -> int:
         try:
             profile = lib.load_json(profile_path)
         except Exception as exc:  # noqa: BLE001
-            report.error(f"{profile_path.relative_to(lib.ROOT)} 无法解析：{exc}")
+            report.error(f"{profile_path.relative_to(lib.ASSETS)} 无法解析：{exc}")
             continue
         try:
             jsonschema.validate(profile, schema)
         except jsonschema.ValidationError as exc:
-            report.error(f"{profile_path.relative_to(lib.ROOT)} 不符合 scene schema：{exc.message}")
+            report.error(f"{profile_path.relative_to(lib.ASSETS)} 不符合 scene schema：{exc.message}")
             continue
         if profile.get("id") != scene_dir.name:
-            report.error(f"{profile_path.relative_to(lib.ROOT)} 的 id {profile.get('id')!r} 与目录名不一致")
+            report.error(f"{profile_path.relative_to(lib.ASSETS)} 的 id {profile.get('id')!r} 与目录名不一致")
 
         images: list[tuple[str, str]] = []
         if profile.get("image"):
@@ -209,12 +209,12 @@ def check_scene_profiles(report: Report, by_path: dict[str, dict]) -> int:
         for where, relative in images:
             image_path = scene_dir / relative
             if not image_path.is_file():
-                report.error(f"{profile_path.relative_to(lib.ROOT)} 的 {where} 引用不存在的图片：{relative}")
+                report.error(f"{profile_path.relative_to(lib.ASSETS)} 的 {where} 引用不存在的图片：{relative}")
                 continue
-            rel = str(image_path.resolve().relative_to(lib.ROOT))
+            rel = str(image_path.resolve().relative_to(lib.ASSETS))
             entry = by_path.get(rel)
             if entry is None:
-                report.error(f"{profile_path.relative_to(lib.ROOT)} 的 {where} 图片没有登记在 manifest：{rel}")
+                report.error(f"{profile_path.relative_to(lib.ASSETS)} 的 {where} 图片没有登记在 manifest：{rel}")
                 continue
             if entry["scene_id"] != scene_dir.name:
                 report.error(f"{scene_dir.name} 引用了别的场景的图：{rel}（属于 {entry['scene_id']}）")
@@ -226,7 +226,7 @@ def check_scene_profiles(report: Report, by_path: dict[str, dict]) -> int:
     for image_path in sorted(lib.SCENES.glob("*/backgrounds/*")):
         if not image_path.is_file():
             continue
-        rel = str(image_path.relative_to(lib.ROOT))
+        rel = str(image_path.relative_to(lib.ASSETS))
         if rel not in by_path:
             report.error(f"交付目录里有未登记的背景图：{rel}")
     return checked
@@ -234,7 +234,7 @@ def check_scene_profiles(report: Report, by_path: dict[str, dict]) -> int:
 
 def check_sources(report: Report, manifest: dict) -> None:
     """Cross-check the source archive entries when temp/ is still around."""
-    source_root = lib.ROOT / manifest.get("source_root", "temp")
+    source_root = lib.ASSETS / manifest.get("source_root", "temp")
     if not source_root.is_dir():
         report.warn(f"原始压缩包目录不存在，跳过来源核对：{source_root}")
         return

@@ -45,7 +45,7 @@ WIKI = "https://bluearchive.wiki"
 API = f"{WIKI}/w/api.php"
 USER_AGENT = "ba-shortdrama/1.0 (+local research; bluearchive.wiki)"
 CHARACTERS = lib.CHARACTERS
-CACHE = lib.ROOT / "local" / "cache" / "bluearchive-wiki"
+CACHE = lib.ASSETS / "local" / "cache" / "bluearchive-wiki"
 
 RIGHTS = (
     "Blue Archive game sprites uploaded to bluearchive.wiki; rights stay with NEXON / "
@@ -348,7 +348,7 @@ def fetch_character(page_name: str, *, slug: str = "", update_profile: bool = Tr
             entries.append(
                 {
                     "key": key,
-                    "file": str(dest.relative_to(lib.ROOT)),
+                    "file": str(dest.relative_to(lib.ASSETS)),
                     "width": width,
                     "height": height,
                     "size": meta["size"],
@@ -394,7 +394,7 @@ def fetch_character(page_name: str, *, slug: str = "", update_profile: bool = Tr
     }
     verify_manifest(manifest)
     lib.write_json(manifest_path, manifest)
-    print(f"清单：{manifest_path.relative_to(lib.ROOT)}")
+    print(f"清单：{manifest_path.relative_to(lib.ASSETS)}")
 
     if update_profile:
         update_profile_outfits(directory, manifest)
@@ -417,7 +417,7 @@ def verify_manifest(manifest: dict) -> None:
         if not outfit["sprites"]:
             raise SystemExit(f"错误：{outfit['id']} 没有任何立绘，manifest/profile 保持不变")
         for entry in outfit["sprites"]:
-            source = lib.ROOT / entry["file"]
+            source = lib.ASSETS / entry["file"]
             if not source.is_file():
                 raise SystemExit(
                     f"错误：{outfit['id']} 的 {entry['key']} 缺少文件 {source}，"
@@ -469,7 +469,7 @@ def update_profile_outfits(directory: Path, manifest: dict) -> None:
     profile["outfits"] = outfits
     profile["missing"] = []
     lib.write_json(path, profile)
-    print(f"  profile：{path.relative_to(lib.ROOT)}（{len(outfits)} 套服装）")
+    print(f"  profile：{path.relative_to(lib.ASSETS)}（{len(outfits)} 套服装）")
 
 
 def list_outfits(page_name: str) -> None:

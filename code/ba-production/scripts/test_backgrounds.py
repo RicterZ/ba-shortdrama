@@ -21,8 +21,10 @@ from pathlib import Path
 
 from PIL import Image
 
+import lib
+
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[2]
+ROOT = lib.ASSETS
 BUILD = HERE / "build_backgrounds.py"
 WORK = ROOT / "local" / "backgrounds-library" / "test-tmp"
 
