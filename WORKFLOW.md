@@ -214,7 +214,7 @@ final 当前仍只放大画幅，没有自动 60fps 转换；2560×1440/60fps �
 
 ## 8. 迭代原则
 
-- 改台词 → 重新 prepare（会重新合成语音）→ validate → render。
-- 只改画面/站位/镜头 → `--reuse-audio`，避免重复合成。
+- 改台词 → 重新 prepare（会重新合成语音）→ validate → preview → 审片 → final。
+- 只改画面/站位/镜头 → `prepare --reuse-audio` → validate → preview，避免重复合成。
 - 新角色：先 `npm run res:kivo -- student <kivo id> --portrait --spine` 拉信息与素材，再 `npm run res:sprites -- get <英文名>` 拉全部服装的全部表情立绘；然后在 `data/characters/<id>/` 建 `profile.yaml`（人设参考 `kivo/summary.json`、`voice` provider/音色、`outfits` 立绘表），由 `profile.json` schema 校验；最后到 `episode.yaml` 的 `characters` 里引用。多套衣服就在 `outfits` 下加条目，分镜用 `outfit` 选择，`emotion` 可用原始索引或已登记的语义别名。
 - 新场景：先从 `data/backgrounds/manifest.json` 选图（或运行 `npm run bg:build` 重建），再在 `data/scenes/<id>/scene.yaml` 建配置，`image` 写相对场景目录的 `backgrounds/<id>-<variant>.jpg`；由 `scene.json` schema 校验，`npm run bg:check` 会核对图片存在、哈希、命名和重复登记。分镜用 `scene` 引用。没有对应 renderer 时先在模板里实现，不要用代码现画房间。

@@ -13,7 +13,7 @@
 - 全身表情立绘已接上 bluearchive.wiki：才羽桃 4 套服装共 81 张透明 PNG，才羽绿（kivo id 27）4 套共 67 张，天童凯伊（kivo id 518）4 套共 114 张；全部按服装落到 `data/characters/<id>/sprites/<outfit>/`，索引在 `sprites/manifest.json`，并写入 `profile.yaml` 的 `outfits`。用 `npm run res:sprites -- get Momoi|Midori|Kei` 复现。
 - 剧情 UI 校准完成（STUD-11）：设计参考、颜色/字号 token 和音效来源见 `docs/UI.md`；可直接用的 UI 音效在 `data/ui/sfx/`，来源与许可见 `data/ui/manifest.json`。
 
-样片优先使用 **Fish Audio**（模型 `s2.1-pro-free`，才羽桃指定音色）合成中文语音，失败时切到 Edge TTS。Fish Audio 的 key 只放在 `local/.env`，不写进文档、不进版本库。**不是原作声优，也没有做声音克隆**；画面不再压角标，合成语音说明保留在 `review.json` 和发布简介里。
+现有角色默认用 **Vocu（悟声）** 合成中文语音，显式加 `--voice-fallback` 才切到 profile 里的备用 provider（Fish Audio / Edge TTS）。key 只放在 `local/.env`，不写进文档、不进版本库。**不是原作声优，也没有做声音克隆**；画面不再压角标，合成语音说明保留在 `review.json` 和发布简介里。
 
 ## 一条链
 
@@ -28,8 +28,12 @@ npm run voice -- check                              # 语音 provider / key / �
 npm run voice -- episode --episode 003-game-dev-sneak --only L7   # 单独补语音（可选）
 EPISODE=002-hidden-ending npm run ep:prepare     # 语音 + 时间轴 + 立绘快照 + scene.json
 npm run ep:validate                              # schema、素材、字幕、音画时长、哈希
-EPISODE=002-hidden-ending npm run ep:render      # MP4 + 预览帧
+EPISODE=002-hidden-ending npm run ep:preview     # 快速预览（半尺寸、1/3 帧率），人工审片
+EPISODE=002-hidden-ending npm run ep:final       # 审片通过后出高质量成片
+EPISODE=002-hidden-ending npm run ep:still -- --frame 120   # 单独抽帧（可选）
 ```
+
+唯一正式流程：prepare → validate → preview → 人工审片 → final。`ep:render` 只是不带 profile 的旧入口，新集不要用。
 
 新建一集：
 

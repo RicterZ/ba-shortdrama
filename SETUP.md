@@ -25,9 +25,11 @@ EPISODE=003-summer-patch npm run ep:prepare -- --reuse-audio
 # 校验全部剧集（只校验一集可加 -- --episode 003-summer-patch）
 npm run ep:validate
 
-# 渲染成片和预览帧
-EPISODE=003-summer-patch npm run ep:render
-EPISODE=003-summer-patch npm run ep:render -- --mode still --frame 120
+# 先出快速预览审片，人工确认后再出成片
+EPISODE=003-summer-patch npm run ep:preview
+EPISODE=003-summer-patch npm run ep:final
+# 单独抽帧
+EPISODE=003-summer-patch npm run ep:still -- --frame 120
 ```
 
 直接调用脚本也可以：

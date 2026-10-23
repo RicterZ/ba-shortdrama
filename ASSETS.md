@@ -74,9 +74,9 @@
 
 ## 语音
 
-- 主引擎：Fish Audio，模型 `s2.1-pro-free`，才羽桃使用工作区所有者提供的音色 ID（记录在 `profile.yaml` 的 `voice.voice_id`）。
-- Key 只放在 `local/.env` 的 `FISH_AUDIO_API_KEY`，权限 600，不进版本库、不写进成片数据。
-- 备用引擎：Edge TTS，`zh-CN-XiaoyiNeural`，语速 +8%；只在显式加 `--voice-fallback` 时启用。
+- 主引擎：现有三名角色的 `profile.yaml` 都用 Vocu（悟声），音色 ID 记录在 `voice.voice_id`；才羽桃的 fallback 是 Fish Audio（`s2.1-pro-free`），再下一级是 Edge TTS；绿和凯伊的 fallback 是 Edge TTS。
+- Key 只放在 `local/.env`（`VOCU_API_KEY`、`FISH_AUDIO_API_KEY`），权限 600，不进版本库、不写进成片数据。
+- 备用引擎只在显式加 `--voice-fallback` / `--fallback` 时启用。
 - **不是原作声优，也没有做声音克隆。** 画面不压「合成语音」角标，说明放在 `review.json` 和发布简介里；公开发布时不能省略。
 - Fish Audio 的免费模型和 Edge TTS 都不保证商用可用；公开发布前必须核实服务条款和音色授权。
 

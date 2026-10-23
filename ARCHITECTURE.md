@@ -39,16 +39,20 @@ bluearchive.wiki（全部服装 × 全部表情全身立绘）
 episode.yaml + script.json + storyboard.json
       + data/characters/*/profile.yaml + data/scenes/*/scene.yaml
         │
-        ├─ prepare.py ──> Fish Audio / Edge TTS 音频 ──> raws/audio/
+        ├─ prepare.py ──> voice.py（Vocu / Fish Audio / Edge TTS）──> raws/audio/
+        │             ──> episode.yaml 的 bgm        ──> raws/audio/ + scene.bgm
         │             ──> 按服装取立绘快照          ──> raws/images/
         │             ──> timing.json / scene.json / assets.lock.json
         │
         ├─ validate.py ──> 错误列表（schema、字幕、时间轴、哈希、成片）
         │
-        └─ render.py ──> Remotion（--props scene.json --public-dir raws）──> MP4 / PNG
+        └─ render.py ──> Remotion（--props scene.json --public-dir raws）
+                      ├─ --profile preview（ep:preview）──> <id>-preview.mp4，人工审片
+                      ├─ --profile final（ep:final）    ──> <id>.mp4
+                      └─ --mode still（ep:still）       ──> preview/frame-NNNN.png
 ```
 
-kivo 素材目前只到「入库 + 索引」；BGM 还没有进入 prepare 的混音和 scene.json，spine 也没有 Live2D 渲染器。剧情 UI 音效走单独的 `data/ui/sfx/`（见 `docs/UI.md`），不依赖 kivo 的 `data/audio/sfx/`。全身表情立绘走 bluearchive.wiki，由 `fetch_sprites.py` 写入 `profile.yaml` 的 `outfits`，prepare 按现有服装/表情路径直接取用。
+BGM 由 `episode.yaml` 的 `bgm` 块经 prepare 进入 scene.json；kivo 的 spine 仍只是入库素材，没有 Live2D 渲染器。剧情 UI 音效走单独的 `data/ui/sfx/`（见 `docs/UI.md`），不依赖 kivo 的 `data/audio/sfx/`。全身表情立绘走 bluearchive.wiki，由 `fetch_sprites.py` 写入 `profile.yaml` 的 `outfits`，prepare 按现有服装/表情路径直接取用。
 
 ## Remotion 模板
 
