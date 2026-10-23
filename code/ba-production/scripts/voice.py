@@ -20,12 +20,11 @@ import subprocess
 import sys
 import tempfile
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
 import edge_tts
+import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lib  # noqa: E402
@@ -96,17 +95,17 @@ def synth_fish(text: str, voice: dict, out: Path, timeout: int) -> None:
             "normalize_loudness": True,
         },
     }
-    request = urllib.request.Request(
+    body, content_type = _fetch(
+        "POST",
         FISH_URL,
+        timeout,
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
             "model": voice.get("model", "s2.1-pro-free"),
         },
-        method="POST",
     )
-    body, content_type = _fetch(request, timeout)
     if "audio" not in content_type or not body:
         raise RuntimeError(f"Fish Audio 返回了非音频内容（{content_type}）：{body[:200]!r}")
     out.write_bytes(body)
@@ -126,13 +125,13 @@ def vocu_sync_synthesize(text: str, voice: dict, key: str, timeout: int) -> byte
         "stream": False,
         "srt": False,
     }
-    request = urllib.request.Request(
+    body, _ = _fetch(
+        "POST",
         VOCU_SYNC_URL,
+        timeout,
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        method="POST",
     )
-    body, _ = _fetch(request, timeout)
     result = json.loads(body)
     data = result.get("data") or {}
     audio_url = data.get("audio")
@@ -140,7 +139,7 @@ def vocu_sync_synthesize(text: str, voice: dict, key: str, timeout: int) -> byte
         raise RuntimeError(f"Vocu returned no audio URL: {body[:300]!r}")
     log.info("vocu sync ready credit=%s url_host=%s", data.get("credit_used"), urllib.parse.urlsplit(audio_url).hostname)
     # Signed CDN URL: never forward the API key to it.
-    audio, content_type = _fetch(urllib.request.Request(audio_url), timeout)
+    audio, content_type = _fetch("GET", audio_url, timeout)
     if "audio" not in content_type or not audio:
         raise RuntimeError(f"Vocu returned empty or non-audio content ({content_type})")
     return audio
@@ -153,29 +152,24 @@ def synth_vocu(text: str, voice: dict, out: Path, timeout: int) -> None:
     out.write_bytes(vocu_sync_synthesize(text, voice, key, timeout))
 
 
-def _fetch(request: urllib.request.Request, timeout: int) -> tuple[bytes, str]:
+def _fetch(
+    method: str, url: str, timeout: int, *, headers: dict | None = None, data: bytes | None = None
+) -> tuple[bytes, str]:
     """Return (body, content-type); surface API and connection errors with context."""
     started = time.time()
+    endpoint = url.split("?")[0]
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            headers_at = time.time()
-            body = response.read()
-            log.info(
-                "http %s %s headers=%.2fs body=%.2fs bytes=%d",
-                request.get_method(),
-                request.full_url.split("?")[0],
-                headers_at - started,
-                time.time() - headers_at,
-                len(body),
-            )
-            return body, response.headers.get("content-type", "")
-    except urllib.error.HTTPError as exc:
-        detail = exc.read()[:300].decode("utf-8", "replace")
-        log.warning("http %s %s HTTP %s after %.2fs: %s", request.get_method(), request.full_url.split("?")[0], exc.code, time.time() - started, detail)
-        raise RuntimeError(f"HTTP {exc.code} {exc.reason}: {detail}") from exc
-    except (urllib.error.URLError, ConnectionError, TimeoutError) as exc:
-        log.warning("http %s %s failed after %.2fs: %s", request.get_method(), request.full_url.split("?")[0], time.time() - started, exc)
-        raise RuntimeError(f"连接失败（{request.full_url.split('?')[0]}）：{exc}") from exc
+        response = requests.request(method, url, headers=headers, data=data, timeout=timeout)
+    except requests.RequestException as exc:
+        log.warning("http %s %s failed after %.2fs: %s", method, endpoint, time.time() - started, exc)
+        raise RuntimeError(f"连接失败（{endpoint}）：{exc}") from exc
+    if not response.ok:
+        detail = response.content[:300].decode("utf-8", "replace")
+        log.warning("http %s %s HTTP %s after %.2fs: %s", method, endpoint, response.status_code, time.time() - started, detail)
+        raise RuntimeError(f"HTTP {response.status_code} {response.reason}: {detail}")
+    body = response.content
+    log.info("http %s %s elapsed=%.2fs bytes=%d", method, endpoint, time.time() - started, len(body))
+    return body, response.headers.get("content-type", "")
 
 
 # ── async multi-line synthesis (悟声) ────────────────────────────────────────
@@ -192,9 +186,8 @@ def _vocu_key(voice: dict) -> str:
 def vocu_voice_info(voice_id: str, key: str, timeout: int = 30) -> dict | None:
     """Return the voice metadata, or None when the account cannot use this voice."""
     url = f"{VOCU_API}/voice/{urllib.parse.quote(voice_id, safe=':')}"
-    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
     try:
-        body, _ = _fetch(request, timeout)
+        body, _ = _fetch("GET", url, timeout, headers={"Authorization": f"Bearer {key}"})
     except RuntimeError as exc:
         if "HTTP 404" in str(exc):
             return None
@@ -210,13 +203,13 @@ def vocu_async_synthesize(
     Returns the per-item metadata (with `audio` URLs) in request order.
     """
     payload = json.dumps({"contents": contents}, ensure_ascii=False).encode("utf-8")
-    request = urllib.request.Request(
+    body, _ = _fetch(
+        "POST",
         VOCU_ASYNC_URL,
+        timeout,
         data=payload,
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        method="POST",
     )
-    body, _ = _fetch(request, timeout)
     task = json.loads(body).get("data") or {}
     task_id = task.get("id")
     if not task_id:
@@ -228,10 +221,7 @@ def vocu_async_synthesize(
         if time.time() > deadline:
             raise RuntimeError(f"async task {task_id} timed out after {timeout}s (status={status})")
         time.sleep(poll_interval)
-        poll = urllib.request.Request(
-            f"{VOCU_ASYNC_URL}/{task_id}", headers={"Authorization": f"Bearer {key}"}
-        )
-        body, _ = _fetch(poll, timeout)
+        body, _ = _fetch("GET", f"{VOCU_ASYNC_URL}/{task_id}", timeout, headers={"Authorization": f"Bearer {key}"})
         task = json.loads(body).get("data") or {}
         new_status = task.get("status", status)
         if new_status != status:
@@ -247,7 +237,7 @@ def vocu_async_synthesize(
 
 
 def download_audio(url: str, target: Path, timeout: int) -> int:
-    body, _ = _fetch(urllib.request.Request(url), timeout)
+    body, _ = _fetch("GET", url, timeout)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(body)
     return len(body)
