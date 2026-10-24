@@ -21,17 +21,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lib  # noqa: E402
 import voice  # noqa: E402
 
+BUBBLE_PRESETS = json.loads((Path(__file__).resolve().parents[1] / "templates/bubble-presets.json").read_text())
+
 def snapshot_bubbles(shots: list[dict], raws: Path) -> None:
     """Snapshot effect media; fail instead of silently rendering a missing effect."""
     for shot in shots:
         for character in shot.get("characters", []):
             for cue in character.get("bubbles", []):
-                media = {
-                    "balloon": lib.ROOT / "data/effects/ba/Emoticon_Balloon_N.png",
-                    "image": lib.ROOT / "data/effects/ba/Emoticon_Shy.png",
-                }
+                preset = BUBBLE_PRESETS[cue["name"]]
+                media = {f"image{index}": lib.ROOT / "data/effects/ba" / image
+                         for index, image in enumerate(preset["images"])}
                 if cue["sound"]:
-                    media["audio"] = lib.ROOT / "data/audio/sfx/SFX_Emoticon_Motion_Shy.wav"
+                    media["audio"] = lib.ROOT / f"data/audio/sfx/SFX_Emoticon_Motion_{cue['name']}.wav"
                 for field, src in media.items():
                     if not src.is_file():
                         raise SystemExit(f"Missing bubble asset: {src.name}; run fetch_bubbles.py")
@@ -40,6 +41,7 @@ def snapshot_bubbles(shots: list[dict], raws: Path) -> None:
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(src, dst)
                     cue[field] = relative.as_posix()
+                cue["images"] = [cue.pop(f"image{index}") for index in range(len(preset["images"]))]
 
 
 def parse_args() -> argparse.Namespace:
@@ -365,13 +367,13 @@ def build_shots(
             bubbles = []
             for cue in entry.get("bubbles") or []:
                 frame = cue.get("startFrame", 0)
-                if cue.get("name") != "Shy" or isinstance(frame, bool) or not isinstance(frame, int):
+                if cue.get("name") not in BUBBLE_PRESETS or isinstance(frame, bool) or not isinstance(frame, int):
                     raise SystemExit(f"Invalid bubble cue: {cue!r}")
                 if not (0 <= frame < duration - lead):
                     raise SystemExit(f"Bubble starts outside shot {raw['id']}")
                 if not isinstance(cue.get("sound", True), bool):
                     raise SystemExit("bubbles.sound must be boolean")
-                bubbles.append({"name": "Shy", "startFrame": frame + lead, "sound": cue.get("sound", True)})
+                bubbles.append({"name": cue["name"], "startFrame": frame + lead, "sound": cue.get("sound", True)})
             characters.append(
                 {
                     "id": entry["id"],

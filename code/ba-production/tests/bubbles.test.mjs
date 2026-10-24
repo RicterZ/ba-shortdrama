@@ -11,3 +11,26 @@ test('Shy starts at 0.8, grows, shakes twice and fades without playback state', 
   assert.equal(sampleShy(1).opacity, 0);
   assert.deepEqual(sampleShy(0.3), sampleShy(0.3));
 });
+
+import {readFileSync} from 'node:fs';
+import {bubbleLayers, bubbleOpacity} from '../templates/bubbles.mjs';
+const presets = JSON.parse(readFileSync(new URL('../templates/bubble-presets.json', import.meta.url)));
+test('all 20 bubbles sample valid image layers and disappear at end', () => {
+  assert.equal(Object.keys(presets).length, 20);
+  for (const [name, preset] of Object.entries(presets)) {
+    for (const t of [0, .1, .3, .6, .9, preset.seconds - .01]) {
+      const layers = bubbleLayers(name, t);
+      assert.ok(layers.length > 0);
+      assert.deepEqual(layers, bubbleLayers(name, t));
+      for (const layer of layers) {
+        assert.ok(preset.images[layer.image]);
+        for (const key of ['x', 'y', 'width', 'scale', 'angle', 'opacity']) assert.ok(Number.isFinite(layer[key]), `${name}.${key}`);
+        assert.ok(layer.opacity >= 0 && layer.opacity <= 1);
+      }
+    }
+    assert.equal(bubbleOpacity(-1, preset.seconds), 0);
+    assert.equal(bubbleOpacity(preset.seconds, preset.seconds), 0);
+  }
+  assert.deepEqual(presets.Think.images, ['Emoticon_Balloon_T.png']);
+  assert.notDeepEqual(presets.Think.images, presets.Dot.images);
+});

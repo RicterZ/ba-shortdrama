@@ -285,6 +285,20 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 同一角色同时只取开始时间最新的动作；下一动作替换前一个（包括恢复隐藏状态和取消拉近），不是队列，也不叠加多个预设。晕倒结束前留足镜头时长；方向是画面方向，不随角色朝向镜像。
 这些曲线参考社区播放器，并非官方逐帧认证。来源及许可见 `THIRD_PARTY_NOTICES.md`。
 
-首个气泡 `Shy` 已接入，先运行 `uv run python code/ba-production/scripts/fetch_bubbles.py` 获取固定版本图片及音效；不覆盖已有资源。角色使用 `"bubbles":[{"name":"Shy","startFrame":30,"sound":true}]`。约 1 秒：0.8 倍放大、内部斜线摇动两轮、淡出。音效不按 12 帧截断；`sound:false` 可关闭。气泡不等同于脸红差分，按需要另选换脸。后触发气泡覆盖前一个视觉效果，音效可重叠。
+气泡字段：先运行 `uv run python code/ba-production/scripts/fetch_bubbles.py` 获取固定版本图片及对应音效，不覆盖已有资源。角色使用 `"bubbles":[{"name":"Shy","startFrame":30,"sound":true}]`。`startFrame` 为镜头内容起点后的帧数，prepare 自动补偿转场。`sound:false` 关闭音效；音频播放自身长度（镜头结束仍会截断，应留足镜头时间）。
 
-其余 19 种气泡尚未接入，不要生成未支持的气泡名或用 `Dot` 代替 `Think`。
+| 气泡预设 | LLM 选择场景 |
+|---|---|
+| `Think` | 思考：独立的思考云气泡，不是省略号气泡 |
+| `Shy` | 害羞斜线；与脸红换脸差分分别控制 |
+| `Angry` / `Upset` | 生气十字 / 不满的线团气泡 |
+| `Chat` / `Dot` | 交谈 / 三个依次出现的省略点 |
+| `Exclaim` / `Question` / `Surprise` | 感叹号 / 问号 / 惊讶符号组合 |
+| `Heart` / `Music` | 爱心气泡 / 音符 |
+| `Respond` / `Twinkle` / `Bulb` | 回应线 / 闪光星 / 灵光灯泡 |
+| `Sweat` / `Sad` / `Tear` | 汗滴 / 低落竖线 / 泪水 |
+| `Steam` / `Sigh` / `Zzz` | 冒气 / 叹气 / 睡觉 |
+
+气泡约 0.5–1.4 秒，具体时长见 `templates/bubble-presets.json`。同一角色后触发气泡替换前一个视觉效果，音效可重叠。气泡跟随站位、跳跃、缩放，隐藏角色同时隐藏气泡。建议不要在晕倒期间触发气泡（气泡不会跟着立绘旋转）。
+
+19 种曲线依据社区播放器转换为分层按帧演出，属于近似复现，不宣称官方逐帧一致。`Think` 上游缺处理函数，采用真实 `Emoticon_Balloon_T` 图和专用音效，入场/停留曲线为本项目自实现；仍需人工比对官方节奏。不得用 Dot、emoji 或换脸代替 Think/Shy。

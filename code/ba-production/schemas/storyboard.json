@@ -326,7 +326,26 @@
                     "properties": {
                       "name": {
                         "enum": [
-                          "Shy"
+                          "Angry",
+                          "Upset",
+                          "Chat",
+                          "Exclaim",
+                          "Heart",
+                          "Dot",
+                          "Music",
+                          "Surprise",
+                          "Question",
+                          "Respond",
+                          "Shy",
+                          "Sweat",
+                          "Twinkle",
+                          "Bulb",
+                          "Sigh",
+                          "Sad",
+                          "Steam",
+                          "Zzz",
+                          "Tear",
+                          "Think"
                         ]
                       },
                       "startFrame": {

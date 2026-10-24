@@ -28,3 +28,13 @@ from the same pinned ba-archive revision under AGPL-3.0. Changes: frame-sampled
 scale, two internal rotations, opacity; CSS layout for flat character sprites.
 `fetch_bubbles.py` retrieves artwork from that revision and records provenance
 locally; these game images and Kivo sound effects are not relicensed as AGPL.
+
+## Expanded bubble presets
+
+`bubble-presets.json` and `bubbleLayers` adapt the same revision's
+`stores/index.ts` emotion resource mapping and `emotionPlayer.ts` timelines.
+All 19 upstream-supported effects use their named image layers and approximate
+frame curves, rather than copying the Pixi/GSAP runtime. Think has no handler in
+that upstream revision: its thought-balloon entrance/hold is independently
+implemented here using `Emoticon_Balloon_T.png`, not the Dot effect. Game-exact
+Think content and timing have not been established.

@@ -1,6 +1,7 @@
 import React from 'react';
 import {sampleActions} from './character-actions.mjs';
-import {sampleShy} from './bubbles.mjs';
+import {bubbleLayers, bubbleOpacity} from './bubbles.mjs';
+import bubblePresets from './bubble-presets.json';
 import {
   AbsoluteFill,
   Audio,
@@ -153,7 +154,7 @@ type Shot = {
     /** Timed expression changes that do not wait for the character's next line. */
     emotionCues?: Array<{ emotion: string; startFrame: number }>;
     actions?: Array<{ name: string; startFrame: number }>;
-    bubbles?: Array<{ name: 'Shy'; startFrame: number; sound?: boolean; balloon?: string; image?: string; audio?: string }>;
+    bubbles?: Array<{ name: keyof typeof bubblePresets; startFrame: number; sound?: boolean; images?: string[]; balloon?: string; image?: string; audio?: string }>;
     facing?: 'left' | 'right';
     turns?: CharacterTurn[];
     motion?: CharacterMotion | null;
@@ -377,7 +378,8 @@ const CharacterFigure: React.FC<{
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
   const action = sampleActions(entry.actions, frame, fps);
-  const latestBubbleFrame = Math.max(-1, ...(entry.bubbles ?? []).filter((cue) => cue.startFrame <= frame).map((cue) => cue.startFrame));
+  const latestBubble = [...(entry.bubbles ?? [])].filter((cue) => cue.startFrame <= frame)
+    .sort((a, b) => a.startFrame - b.startFrame).at(-1);
   if (!data) return null;
 
   const outfit = data.outfits[entry.outfit] || data.outfits[data.default_outfit];
@@ -502,13 +504,15 @@ const CharacterFigure: React.FC<{
         }}
       />
       {(entry.bubbles ?? []).map((cue, index) => {
-        const pose = sampleShy((frame - cue.startFrame) / fps);
+        const seconds = (frame - cue.startFrame) / fps;
+        const preset = bubblePresets[cue.name];
+        const opacity = bubbleOpacity(seconds, preset.seconds);
+        const images = cue.images ?? [cue.balloon, cue.image];
         return <React.Fragment key={index}>
           {cue.sound !== false && cue.audio ? <Sequence from={cue.startFrame}><Audio src={staticFile(cue.audio)} volume={0.5} /></Sequence> : null}
-          {cue.startFrame === latestBubbleFrame && pose.opacity > 0 && cue.balloon && cue.image ? (
-            <div style={{position: 'absolute', left: `${px * 100}%`, bottom: `${(ground + lift + entry.height * poseScale * 0.7) * 100}%`, width: height * entry.height * poseScale * 0.23, opacity: pose.opacity * action.opacity, transformOrigin: 'bottom right', transform: `translateX(35%) scale(${pose.scale})`}}>
-              <Img src={staticFile(cue.balloon)} style={{width: '100%'}} />
-              <Img src={staticFile(cue.image)} style={{position: 'absolute', width: '55%', left: '18%', top: '15%', transform: `rotate(${pose.angle}deg)`}} />
+          {cue === latestBubble && opacity > 0 ? (
+            <div style={{position: 'absolute', left: `calc(${px * 100}% + ${height * entry.height * poseScale * .18 + tx}px)`, bottom: `${(ground + lift + entry.height * poseScale * .72) * 100}%`, width: height * entry.height * poseScale * preset.width * .5, aspectRatio: '1', opacity: opacity * action.opacity}}>
+              {bubbleLayers(cue.name, seconds).map((layer, i) => images[layer.image] ? <Img key={i} src={staticFile(images[layer.image]!)} style={{position: 'absolute', width: `${layer.width * 100}%`, left: `${layer.x * 100}%`, top: `${layer.y * 100}%`, opacity: layer.opacity, transform: `rotate(${layer.angle}deg) scale(${layer.scale})`}} /> : null)}
             </div>
           ) : null}
         </React.Fragment>;

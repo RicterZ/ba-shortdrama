@@ -61,6 +61,14 @@ def build(count: int, transitions: dict | None, backgrounds: list[str] | None = 
 
 
 class ParseTransitionTest(unittest.TestCase):
+    def test_every_bubble_name_survives_prepare(self):
+        for name in prepare.BUBBLE_PRESETS:
+            with self.subTest(name=name):
+                raw = board(1)
+                raw[0]["characters"] = [{"id": "saiba-momoi", "bubbles": [{"name": name, "startFrame": 10}]}]
+                shots, _, _ = prepare.build_shots(raw, [line("L1", 0)], TIMING, {}, {"saiba-momoi": "default"})
+                self.assertEqual(shots[0]["characters"][0]["bubbles"], [{"name": name, "startFrame": 10, "sound": True}])
+
     def test_bubble_snapshot_copies_media_and_mute_needs_no_audio(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -72,7 +80,7 @@ class ParseTransitionTest(unittest.TestCase):
             shots = [{"characters": [{"bubbles": [cue]}]}]
             with patch.object(lib, "ROOT", root):
                 prepare.snapshot_bubbles(shots, root / "raws")
-                self.assertEqual((root / "raws" / cue["image"]).read_bytes(), b"test-png")
+                self.assertEqual((root / "raws" / cue["images"][1]).read_bytes(), b"test-png")
                 self.assertNotIn("audio", cue)
                 cue["sound"] = True
                 with self.assertRaises(SystemExit):
@@ -205,7 +213,7 @@ class ShotLayoutTest(unittest.TestCase):
 
     def test_invalid_bubbles_are_rejected(self):
         for cue in [
-            {"name": "Think", "startFrame": 0},
+            {"name": "Invalid", "startFrame": 0},
             {"name": "Shy", "startFrame": -1},
             {"name": "Shy", "startFrame": True},
             {"name": "Shy", "startFrame": 0, "sound": "false"},
