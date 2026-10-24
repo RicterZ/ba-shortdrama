@@ -520,9 +520,9 @@ const CharacterFigure: React.FC<{
               width: geometry.width,
               aspectRatio: preset.aspectRatio ?? 1,
               opacity,
-              transform: cue.name === 'Shy' ? 'translate(-100%, -100%)' : undefined,
+              transform: cue.name === 'Shy' && !outfit.spineBounds?.bubbleAnchors?.Dot ? 'translate(-100%, -100%)' : undefined,
             }}>
-              {bubbleLayers(cue.name, seconds, outfit.spineBounds?.bubbleAnchors?.[cue.name]).map((layer, i) => images[layer.image] ? <Img key={i} src={staticFile(images[layer.image]!)} style={{position: 'absolute', width: `${layer.width * 100}%`, left: `${layer.x * 100}%`, top: `${layer.y * 100}%`, opacity: layer.opacity, transform: `rotate(${layer.angle}deg) scale(${layer.scale})`}} /> : null)}
+              {bubbleLayers(cue.name, seconds, outfit.spineBounds?.bubbleAnchors?.[cue.name]).map((layer, i) => images[layer.image] ? <Img key={i} src={staticFile(images[layer.image]!)} style={{position: 'absolute', width: `${layer.width * 100}%`, left: `${layer.x * 100}%`, top: `${layer.y * 100}%`, opacity: layer.opacity, transformOrigin: '0 0', transform: `rotate(${layer.angle}deg) scale(${layer.scale}) translate(${-(layer.anchorX ?? 0) * 100}%, ${-(layer.anchorY ?? 0) * 100}%)`}} /> : null)}
             </div>
           ) : null}
         </React.Fragment>;

@@ -25,9 +25,16 @@ test('Yuuka screenshot anchor matches measured screen coordinates and scales wit
   assert.ok(Math.abs(g.y + 66.47091 - 260) < .01);
   assert.ok(Math.abs(g.width - 193.8) < .01);
   const zoom = bubbleGeometry(presets.Dot, h * 1.5, bounds, 'Dot');
+  for (const [name, preset] of Object.entries(presets)) {
+    assert.deepEqual(bubbleGeometry(preset, h, bounds, name), g);
+  }
   for (const key of ['x', 'y', 'width']) assert.ok(Math.abs(zoom[key] - g[key] * 1.5) < 1e-8);
   const dots = bubbleLayers('Dot', .8, anchors.Dot);
   assert.ok(Math.abs((dots[2].x - dots[1].x) * g.width - 47) < .1);
+});
+test('Angry and Respond retain upstream pivots instead of rotating at CSS center', () => {
+  assert.deepEqual(bubbleLayers('Angry', .1).map(p => [p.anchorX, p.anchorY]), [[.35, -.05], [.35, -.05], [.35, -.05]]);
+  assert.deepEqual(bubbleLayers('Respond', .1).map(p => p.anchorX), [1.8, 1.5, 1.8]);
 });
 test('all 20 bubbles sample valid image layers and disappear at end', () => {
   assert.equal(Object.keys(presets).length, 20);

@@ -4,7 +4,7 @@
 export function bubbleGeometry(preset, spriteHeight, bounds, name) {
   if (!bounds || !(bounds.height > 0)) throw new Error('Bubble requires matching Spine bounds');
   const scale = spriteHeight / bounds.height;
-  const calibration = bounds.bubbleAnchors?.[name];
+  const calibration = bounds.bubbleAnchors?.[name] ?? bounds.bubbleAnchors?.Dot;
   if (calibration) return {
     x: calibration.x * spriteHeight * bounds.imageWidth / bounds.imageHeight,
     y: calibration.y * spriteHeight,
@@ -62,9 +62,9 @@ export function bubbleLayers(name, t, calibration) {
       return [layer(0, 0, 0, 1, t < .2 ? 1 + (peak - 1) * clamp(t / .2) : peak - .2 * clamp((t - .2) / .1))];
     }
     case 'Chat': return [layer(0, 0, 0, 1, 1, -25 * Math.sin(Math.PI * clamp(t / .5)))];
-    case 'Angry': return [0, 1, 2].map((i) => layer(0, 0, 0, 1, t < .4 ? 1 - .1 * Math.sin(Math.PI * t / .4) : 1 - .8 * clamp((t - .4) / .1), i * 120));
+    case 'Angry': return [0, 1, 2].map((i) => layer(0, 0, 0, 1, t < .4 ? 1 - .1 * Math.sin(Math.PI * t / .4) : 1 - .8 * clamp((t - .4) / .1), i * 120)).map((pose) => ({...pose, anchorX: .35, anchorY: -.05}));
     case 'Music': return [layer(0, -clamp(t / .9), .1 * wave(.5), 1, .7 + .3 * clamp(t / .1), -8 * wave(.5))];
-    case 'Respond': return [-10, 23, 50].map((angle, i) => layer(0, i * .25, 0, i === 1 ? .5 : .35, 1, angle, .2 + .8 * Math.abs(wave(.6))));
+    case 'Respond': return [-10, 23, 50].map((angle, i) => ({...layer(0, 0, 0, i === 1 ? 2 : 1.4, 1, angle, .2 + .8 * Math.abs(wave(.6))), anchorX: i === 1 ? 1.5 : 1.8, anchorY: 0}));
     case 'Twinkle': return [[0, .3, .4], [.45, 0, .36], [.5, .6, .24]].map(([x, y, w], i) => layer(0, x, y, w, 1 + .2 * Math.sin(t / [.5, .6, .4][i] * Math.PI * 2)));
     case 'Sweat': return [layer(0, 0, clamp(t / .4) * .4, .45), layer(1, .5, -.2 + clamp(t / .4) * .9, .35)];
     case 'Surprise': return [layer(0, -.1 * clamp(t / .3), -.1 * Math.sin(Math.PI * clamp(t / .3)), .4, .7 + .3 * clamp(t / .3), -10), layer(1, .5, 0, .4, .7 + .3 * clamp(t / .3), 15)];
