@@ -263,3 +263,26 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 - 只改画面/站位/镜头 → `prepare --reuse-audio` → validate → preview，避免重复合成。
 - 新角色：先 `npm run res:kivo -- student <kivo id> --portrait --spine` 拉信息与素材，再 `npm run res:sprites -- get <英文名>` 拉全部服装的全部表情立绘；然后在 `data/characters/<id>/` 建 `profile.yaml`（人设参考 `kivo/summary.json`、`voice` provider/音色、`outfits` 立绘表），由 `profile.json` schema 校验；最后到 `episode.yaml` 的 `characters` 里引用。多套衣服就在 `outfits` 下加条目，分镜用 `outfit` 选择，`emotion` 可用原始索引或已登记的语义别名。
 - 新场景：先从 `data/backgrounds/manifest.json` 选图（或运行 `npm run bg:build` 重建），再在 `data/scenes/<id>/scene.yaml` 建配置，`image` 写相对场景目录的 `backgrounds/<id>-<variant>.jpg`；由 `scene.json` schema 校验，`npm run bg:check` 会核对图片存在、哈希、命名和重复登记。分镜用 `scene` 引用。没有对应 renderer 时先在模板里实现，不要用代码现画房间。
+
+### 角色内置动作（首批已接入）
+
+分镜角色可用 `actions`，时间为镜头内容起点后的帧数；prepare 自动补偿转场。
+动作、`emotionCues` 换脸与 `motion` 站位移动互相独立。
+
+```json
+{"id":"saiba-momoi","actions":[{"name":"hophop","startFrame":12},{"name":"falldownR","startFrame":90}]}
+```
+
+| 预设 | LLM 选择场景 | 持续时间 |
+|---|---|---|
+| `jump` / `hophop` | 吃惊单跳 / 兴奋连跳两次 | 0.25 / 0.5 秒 |
+| `greeting` | 招呼、点头（轻微下沉后恢复） | 0.4 秒 |
+| `shake` / `stiff` | 摇晃 / 小幅快速震动 | 0.24 / 0.4 秒 |
+| `closeup` | 强调角色，放大到原来的 1.5 倍 | 保持至下一动作 |
+| `falldownL` / `falldownR` | 左右摇摆后晕倒下落 | 约 1.87 秒后隐藏 |
+| `hide` | 立即隐藏角色及投影 | 保持至下一动作 |
+
+同一角色同时只取开始时间最新的动作；下一动作替换前一个（包括恢复隐藏状态和取消拉近），不是队列，也不叠加多个预设。晕倒结束前留足镜头时长；方向是画面方向，不随角色朝向镜像。
+这些曲线参考社区播放器，并非官方逐帧认证。来源及许可见 `THIRD_PARTY_NOTICES.md`。
+
+气泡系统与配套音效尚未接入：不要生成 `Think`、`Shy` 等动作名，也不要用换脸或 `Dot` 代替思考气泡。

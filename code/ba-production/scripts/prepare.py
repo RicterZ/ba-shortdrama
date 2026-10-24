@@ -328,6 +328,19 @@ def build_shots(
                         f"镜头 {raw['id']} 角色 {entry['id']} 的表情起点 {cue_frame} 超出镜头时长 {duration} 帧"
                     )
                 emotion_cues.append({"emotion": name, "startFrame": cue_frame})
+            actions = []
+            action_names = {"jump", "hophop", "greeting", "shake", "stiff", "closeup", "falldownL", "falldownR", "hide"}
+            for cue in entry.get("actions") or []:
+                name = cue.get("name")
+                cue_frame = cue.get("startFrame", 0)
+                if name not in action_names:
+                    raise SystemExit(f"Unknown character action: {name!r}")
+                if isinstance(cue_frame, bool) or not isinstance(cue_frame, int):
+                    raise SystemExit("actions.startFrame must be an integer")
+                cue_frame += lead
+                if not (lead <= cue_frame < duration):
+                    raise SystemExit(f"Character action {name} starts outside shot {raw['id']}")
+                actions.append({"name": name, "startFrame": cue_frame})
             characters.append(
                 {
                     "id": entry["id"],
@@ -341,6 +354,7 @@ def build_shots(
                     "emotion": entry.get("emotion", "default"),
                     "holdEmotion": bool(entry.get("holdEmotion", False)),
                     "emotionCues": emotion_cues,
+                    "actions": actions,
                     "facing": facing,
                     "turns": turns,
                     "motion": motion,

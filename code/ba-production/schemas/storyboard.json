@@ -283,6 +283,36 @@
                       "maximum": 0.5
                     }
                   }
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "startFrame"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "enum": [
+                          "jump",
+                          "hophop",
+                          "greeting",
+                          "shake",
+                          "stiff",
+                          "closeup",
+                          "falldownL",
+                          "falldownR",
+                          "hide"
+                        ]
+                      },
+                      "startFrame": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    }
+                  }
                 }
               }
             }

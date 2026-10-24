@@ -1,4 +1,5 @@
 import React from 'react';
+import {sampleActions} from './character-actions.mjs';
 import {
   AbsoluteFill,
   Audio,
@@ -150,6 +151,7 @@ type Shot = {
     holdEmotion?: boolean;
     /** Timed expression changes that do not wait for the character's next line. */
     emotionCues?: Array<{ emotion: string; startFrame: number }>;
+    actions?: Array<{ name: string; startFrame: number }>;
     facing?: 'left' | 'right';
     turns?: CharacterTurn[];
     motion?: CharacterMotion | null;
@@ -372,6 +374,7 @@ const CharacterFigure: React.FC<{
 }> = ({ entry, data, activeLine, heldEmotion, shadowColor, shotDuration }) => {
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
+  const action = sampleActions(entry.actions, frame, fps);
   if (!data) return null;
 
   const outfit = data.outfits[entry.outfit] || data.outfits[data.default_outfit];
@@ -475,7 +478,7 @@ const CharacterFigure: React.FC<{
           transform: 'translateX(-50%)',
           borderRadius: '50%',
           background: shadowColor,
-          opacity: 1 - lift * 5,
+          opacity: (1 - lift * 5) * action.opacity,
           filter: 'blur(14px)',
         }}
       />
@@ -487,9 +490,9 @@ const CharacterFigure: React.FC<{
           bottom: `${pBottom * 100}%`,
           height: `${entry.height * 100}%`,
           width: 'auto',
-          transform: `translateX(-50%) translate(${tx}px, 0px) scale(${poseScale}) scaleX(${flip})`,
-          transformOrigin: 'bottom center',
-          opacity: entry.entrance === 'fade-in' ? entrance : 1,
+          transform: `translateX(-50%) translate(${tx}px, 0px) translate(${action.x * 100}%, ${action.y * 100}%) scale(${poseScale * action.scale}) rotate(${action.angle}deg) scaleX(${flip})`,
+          transformOrigin: action.origin,
+          opacity: (entry.entrance === 'fade-in' ? entrance : 1) * action.opacity,
           filter: isDimmed
             ? 'brightness(0.66) saturate(0.82) drop-shadow(0 10px 22px rgba(20,30,45,0.20))'
             : 'drop-shadow(0 16px 30px rgba(20,30,45,0.22))',

@@ -169,7 +169,8 @@ class ShotLayoutTest(unittest.TestCase):
             "hideFrame": 50,
         }
         raw[1]["characters"] = [
-            {"id": "saiba-momoi", "motion": {"startFrame": 0, "endFrame": 60}}
+            {"id": "saiba-momoi", "motion": {"startFrame": 0, "endFrame": 60},
+             "actions": [{"name": "falldownL", "startFrame": 20}]}
         ]
         shots, _, _ = prepare.build_shots(
             raw, timed, TIMING, {}, {"saiba-momoi": "default"}, cfg
@@ -179,6 +180,20 @@ class ShotLayoutTest(unittest.TestCase):
         self.assertEqual(shots[1]["choices"]["selectFrame"], 50)
         self.assertEqual(shots[1]["choices"]["hideFrame"], 60)
         self.assertEqual(shots[1]["characters"][0]["motion"], {"startFrame": 10, "endFrame": 70})
+        self.assertEqual(shots[1]["characters"][0]["actions"], [{"name": "falldownL", "startFrame": 30}])
+
+    def test_invalid_actions_are_rejected(self):
+        for cue in [
+            {"name": "typo", "startFrame": 0},
+            {"name": "jump", "startFrame": -1},
+            {"name": "jump", "startFrame": 1000},
+            {"name": "jump", "startFrame": 0.5},
+            {"name": "jump", "startFrame": True},
+        ]:
+            with self.subTest(cue=cue), self.assertRaises(SystemExit):
+                raw = board(1)
+                raw[0]["characters"] = [{"id": "saiba-momoi", "actions": [cue]}]
+                prepare.build_shots(raw, [line("L1", 0)], TIMING, {}, {"saiba-momoi": "default"})
 
     def test_transition_longer_than_a_shot_is_rejected(self):
         cfg = {"on": "every-cut", "type": "fade", "durationInFrames": 120}
