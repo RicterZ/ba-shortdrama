@@ -206,6 +206,7 @@
     ],
     "seconds": 1.3,
     "width": 0.27,
+    "nativeWidth": 191,
     "offset": {
       "x": 0.5,
       "y": 0.1
@@ -218,11 +219,12 @@
     ],
     "seconds": 2.35,
     "width": 0.1,
+    "nativeWidth": 92,
     "offset": {
       "x": 0.45,
       "y": 0.1
     },
-    "aspectRatio": 3.0
+    "aspectRatio": 0.9787234042553191
   },
   "Tear": {
     "images": [
@@ -231,6 +233,7 @@
     ],
     "seconds": 1.3,
     "width": 0.27,
+    "nativeWidth": 68,
     "offset": {
       "x": 0.45,
       "y": 0.15

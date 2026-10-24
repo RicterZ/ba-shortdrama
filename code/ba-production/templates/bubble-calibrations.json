@@ -66,23 +66,8 @@
         "x": 0.35713807309409545,
         "y": 0.11650668556485236,
         "width": 0.06974389125864716
-      },
-      "Steam": {
-        "x": 0.5097028352223861,
-        "y": 0.11184120065155419,
-        "width": 0.11333382329530163
-      },
-      "Zzz": {
-        "x": 0.2590607260116229,
-        "y": 0.12117217047815054,
-        "width": 0.10461583688797073
-      },
-      "Tear": {
-        "x": 0.455215420176568,
-        "y": 0.16316153469783412,
-        "width": 0.06538489805498171
       }
     },
-    "reviewPlacementNote": "Only Dot is measured from the game screenshot. Other named anchors are provisional character-local placements for user screenshot review, not verified official positions."
+    "reviewPlacementNote": "Only Dot is measured from the game screenshot. Other named anchors are provisional character-local placements for user screenshot review, not verified official positions. Steam, Zzz and Tear are omitted so they keep the upstream spine offset and native texture size."
   }
 }

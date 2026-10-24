@@ -50,6 +50,8 @@ test('review fixes retain native image ratios, independent scale axes and timed 
   assert.equal(sigh.anchorY, -.2);
   assert.equal(bubbleLayers('Sigh', 1)[0].opacity, 0);
   assert.equal(bubbleLayers('Steam', 1).reduce((sum, p) => sum + p.opacity, 0), 0);
+  assert.equal(bubbleLayers('Steam', 0)[1].scale, 0.1);
+  assert.equal(bubbleLayers('Steam', 0)[0].opacity, 0);
   assert.deepEqual(bubbleLayers('Zzz', .2).map(p => p.opacity), [1, 0, 0]);
   assert.deepEqual(bubbleLayers('Zzz', 1).map(p => p.opacity), [1, 1, 0]);
   assert.deepEqual(bubbleLayers('Zzz', 1.9).map(p => p.opacity), [1, 1, 1]);
@@ -90,6 +92,39 @@ test('geometry maps native Spine origin into PNG and scales without a guessed ce
   }
   assert.throws(() => bubbleGeometry(presets.Shy, 600));
   assert.equal(presets.Shy.width, .46);
+});
+
+test('Steam, Tear and Zzz keep upstream pixel size instead of width*540', () => {
+  assert.equal(presets.Steam.nativeWidth, 191);
+  assert.equal(presets.Tear.nativeWidth, 68);
+  assert.equal(presets.Zzz.nativeWidth, 92);
+  assert.equal(presets.Zzz.aspectRatio, 92 / 94);
+  const bounds = {x: -530, y: -1025, width: 1050, height: 2453, imageWidth: 822, imageHeight: 1920};
+  for (const name of ['Steam', 'Zzz', 'Tear']) {
+    const preset = presets[name];
+    const g = bubbleGeometry(preset, bounds.height, bounds, name);
+    assert.equal(g.x, (preset.offset.x - .8) * 540 - bounds.x);
+    assert.equal(g.y, (preset.offset.y - 1.2) * 1012 + bounds.y + bounds.height);
+    assert.equal(g.width, preset.nativeWidth);
+  }
+  const steam = bubbleLayers('Steam', 14 / 60);
+  assert.equal(steam[1].scale, 0.7);
+  assert.equal(steam[1].angle, -30);
+  assert.deepEqual([steam[1].anchorX, steam[1].anchorY], [1.4, 1.5]);
+  assert.equal(steam[0].scale, 0.6);
+  const tear = bubbleLayers('Tear', 0);
+  assert.equal(tear[0].y, 30 / 87);
+  assert.equal(tear[0].width, 1);
+  assert.equal(tear[0].scale, 0.5);
+  assert.deepEqual([tear[0].anchorX, tear[0].anchorY], [1, 0]);
+  assert.equal(tear[1].width, 52 / 68);
+  assert.equal(tear[1].scale, 0.6);
+  const zzz = bubbleLayers('Zzz', 1.9);
+  assert.deepEqual(zzz.map(layer => layer.x), [0, -80 / 92, -190 / 92]);
+  assert.deepEqual(zzz.map(layer => layer.y), [0, -30 / 94, 7 / 94]);
+  assert.deepEqual(zzz.map(layer => layer.width), [1, 1, 1]);
+  assert.deepEqual(zzz.map(layer => layer.scale), [.8, .9, 1]);
+  assert.deepEqual(zzz.map(layer => layer.angle), [15, 5, -15]);
 });
 
 test('Dot keeps the official balloon-to-character size ratio and native dot spacing', () => {

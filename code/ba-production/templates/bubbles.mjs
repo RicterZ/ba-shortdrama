@@ -71,10 +71,12 @@ export function bubbleLayers(name, t, calibration) {
     case 'Sweat': return [layer(0, 0, clamp(t / .4) * 74 / 114), layer(1, 1, (-.5 + 2.3 * 46 / 74 * clamp(t / .4)) * 74 / 114, 46 / 74)];
     case 'Surprise': return [anchored(layer(0, 0, -.08 * Math.sin(Math.PI * clamp(t / .3)), 1, .7 + .3 * clamp(t / .3), -10), .5, 1), anchored(layer(1, 1.05, 0, 103 / 60, .7 + .3 * clamp(t / .3), 15), .5, 1)].map((p, i) => ({...p, scaleY: i ? .3 + .7 * clamp(t / .3) : 1}));
     case 'Sad': return [0, 1, 2].map((i) => ({...layer(0, i * 30 / 88, ([0, 30, -30][i] + 35 * clamp((t - i / 6 - 1 / 15) / (4 / 15))) / 160, 28 / 88, 1, 0, clamp((t - i / 6) * 15)), scaleY: .5 + .5 * clamp((t - i / 6 - 1 / 15) / (4 / 15))}));
-    case 'Steam': return [anchored(layer(0, 0, 0, 1, .1 + .6 * clamp(t / (14 / 60)), -30, 1 - clamp((t - 14 / 60) / (12 / 60))), 1.4, 1.5), anchored(layer(0, 0, 0, 1, .6 + .3 * clamp((t - 14 / 60) / (21 / 60)), 0, t < 14 / 60 ? 0 : 1 - clamp((t - 35 / 60) / (8 / 60))), 1.4, 1.5)];
+    // Steam, Tear and Zzz never call getRelativeScale. Their box is the source
+    // texture in spine pixels; animation scale is the Pixi scale, not a second fit.
+    case 'Steam': return [anchored(layer(0, 0, 0, 1, .6 + .3 * clamp((t - 14 / 60) / (21 / 60)), 0, t < 14 / 60 ? 0 : 1 - clamp((t - 35 / 60) / (8 / 60))), 1.4, 1.5), anchored(layer(0, 0, 0, 1, .1 + .6 * clamp(t / (14 / 60)), -30, 1 - clamp((t - 14 / 60) / (12 / 60))), 1.4, 1.5)];
     case 'Sigh': return [anchored(layer(0, 0, 0, 1, .3 + .6 * out((t - 2 / 60) / (33 / 60)), 0, clamp(t / (2 / 60)) * (1 - clamp((t - 47 / 60) / (11 / 60)))), 1, -.2)];
     case 'Tear': return [anchored(layer(0, 0, 30 / 87, 1, .5 + .5 * out((t - 12 / 60) / (13 / 60)), 0, clamp((t - 12 / 60) / (3 / 60)) * (1 - clamp((t - 57 / 60) / (4 / 60)))), 1, 0), anchored(layer(1, 0, 0, 52 / 68, .6 + .4 * out((t - 7 / 60) / (12 / 60)), 0, clamp(t / (7 / 60)) * (1 - clamp((t - 32 / 60) / (15 / 60)))), 1, 0)];
-    case 'Zzz': return [0, 1, 2].map((i) => layer(0, [0, -80, -190][i] / 282, [0, -30, 7][i] / 94, 92 / 282, [.8, .9, 1][i], [15, 5, -15][i], t >= [0, 53 / 60, 101 / 60][i] ? 1 : 0));
+    case 'Zzz': return [0, 1, 2].map((i) => layer(0, [0, -80, -190][i] / 92, [0, -30, 7][i] / 94, 1, [.8, .9, 1][i], [15, 5, -15][i], t >= [0, 53 / 60, 101 / 60][i] ? 1 : 0));
     default: throw new Error(`Unsupported bubble: ${name}`);
   }
 }
