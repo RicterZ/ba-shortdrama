@@ -65,7 +65,7 @@ npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-mom
       "scene": { "id": "game-dev-room", "variant": "afternoon" },
       "camera": "push-in",
       "characters": [
-        { "id": "saiba-momoi", "outfit": "default", "x": 0.66, "height": 0.92, "entrance": "slide-in-right", "emotion": "default" }
+        { "id": "saiba-momoi", "outfit": "default", "x": 0.66, "entrance": "slide-in-right", "emotion": "default" }
       ],
       "lines": ["L1", "L2"]
     }
@@ -76,7 +76,7 @@ npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-mom
 - 台词必须在镜头中按顺序各出现一次，不能漏、不能重复。
 - `scene` 引用 `data/scenes/<id>/scene.yaml`，可写成字符串（用默认变体）或 `{id, variant}`。变体决定光线和墙面色，例如 `afternoon` / `monitor-glow` / `lamp`；切镜时自动换光。
 - `outfit` 选角色 profile 里的服装；省略时用 `default_outfit`。同一角色可以在不同镜头穿不同衣服。
-- `x` 是角色中心横坐标（0–1）；`bottom` 是底部偏移比例；`height` 是画面高度占比；`scale` 是额外缩放。
+- `x` 是角色中心横坐标（0–1）；`bottom` 是底部偏移比例（默认 -0.25）；`height` 是画面高度占比（默认 1.08）；`scale` 是额外缩放。需要不同构图时在分镜里写 `height` / `bottom` 覆盖。
 - `entrance`：`none` / `fade-in` / `slide-in-left` / `slide-in-right`；滑入是纯平移，没有步伐起伏。
 - `motion`（可选）：镜头内的走位。`fromX` / `toX` 与 `fromBottom` / `toBottom` 是起点和终点的位置比例，`fromScale` / `toScale` 是缩放，`startFrame` / `endFrame` 相对镜头起点（省略时从 0 到镜头结束），`ease` 取 `linear` / `ease-in-out`。省略的起止值取角色当前的 `x` / `bottom` / `scale`。走位只做平移，不模拟走路；走完停在终点，后续镜头沿用同一个 `x` / `bottom`，不要每镜重新漂移。
 - `motion.hops`（可选）：把这段位移拆成几次跳跃，每次向前一截并起落一次，用来演被吓退、蹦跳这类反应；`hopLift` 是每次起跳的高度（相对画面高度，默认 0.05）。`ease` 对跳跃不起作用，落点仍然是 `toX` / `toBottom`，下一镜照样从落点接上。
