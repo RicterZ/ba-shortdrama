@@ -44,7 +44,9 @@ export function bubbleLayers(name, t) {
     case 'Upset':
       return [layer(0), layer(1, .2, .15, .6, 1 - .2 * Math.abs(wave(.86)), 6 * wave(.4))];
     case 'Dot':
-      return [layer(0), ...[0, 1, 2].map((i) => layer(1, .1 + i * .25, .35, .1, 1, 0, clamp((t - .3 - i * .4) / .1)))];
+      // Source creates three 39px dots over the 255x198 balloon, positions
+      // their container at (10%, 35%), then advances each dot by 2 widths.
+      return [layer(0), ...[0, 1, 2].map((i) => layer(1, .1 + i * 2 * 39 / 255, .35, 39 / (255 * .16), 1, 0, clamp((t - .3 - i * .4) / .1)))];
     case 'Bulb':
       return [layer(0, 0, 0, 1, .7 + .3 * clamp(t / .2)), layer(1, .3, .18, .4), layer(2, .25, .08, .5, 1, 0, clamp((t - .2) / .1))];
     case 'Question':

@@ -8,7 +8,8 @@
     "offset": {
       "x": 0.5,
       "y": 0.05
-    }
+    },
+    "aspectRatio": 1.4029850746268657
   },
   "Upset": {
     "images": [
@@ -20,7 +21,8 @@
     "offset": {
       "x": 0.0,
       "y": -0.1
-    }
+    },
+    "aspectRatio": 1.2878787878787878
   },
   "Chat": {
     "images": [
@@ -31,7 +33,8 @@
     "offset": {
       "x": 0.45,
       "y": 0.17
-    }
+    },
+    "aspectRatio": 0.7170731707317073
   },
   "Exclaim": {
     "images": [
@@ -42,7 +45,8 @@
     "offset": {
       "x": 0.42,
       "y": -0.1
-    }
+    },
+    "aspectRatio": 0.48633879781420764
   },
   "Heart": {
     "images": [
@@ -54,7 +58,8 @@
     "offset": {
       "x": 0.1,
       "y": -0.1
-    }
+    },
+    "aspectRatio": 1.2878787878787878
   },
   "Dot": {
     "images": [
@@ -62,11 +67,12 @@
       "Emoticon_Idea.png"
     ],
     "seconds": 1.4,
-    "width": 0.3,
+    "width": 0.16,
     "offset": {
       "x": 0.0,
       "y": -0.1
-    }
+    },
+    "aspectRatio": 1.2878787878787878
   },
   "Music": {
     "images": [
@@ -77,7 +83,8 @@
     "offset": {
       "x": 0.2,
       "y": 0.0
-    }
+    },
+    "aspectRatio": 1.0458015267175573
   },
   "Surprise": {
     "images": [
@@ -89,7 +96,8 @@
     "offset": {
       "x": 0.35,
       "y": 0.06
-    }
+    },
+    "aspectRatio": 0.40268456375838924
   },
   "Question": {
     "images": [
@@ -100,7 +108,8 @@
     "offset": {
       "x": 0.4,
       "y": 0.07
-    }
+    },
+    "aspectRatio": 0.7258064516129032
   },
   "Respond": {
     "images": [
@@ -111,7 +120,8 @@
     "offset": {
       "x": 0.6,
       "y": 0.0
-    }
+    },
+    "aspectRatio": 2.4901960784313726
   },
   "Shy": {
     "images": [
@@ -123,7 +133,8 @@
     "offset": {
       "x": 0.5,
       "y": 0.06
-    }
+    },
+    "aspectRatio": 1.2878787878787878
   },
   "Sweat": {
     "images": [
@@ -135,7 +146,8 @@
     "offset": {
       "x": 0.4,
       "y": 0.0
-    }
+    },
+    "aspectRatio": 0.6491228070175439
   },
   "Twinkle": {
     "images": [
@@ -146,7 +158,8 @@
     "offset": {
       "x": 0.2,
       "y": 0.0
-    }
+    },
+    "aspectRatio": 0.9029850746268657
   },
   "Bulb": {
     "images": [
@@ -159,7 +172,8 @@
     "offset": {
       "x": 0.1,
       "y": -0.1
-    }
+    },
+    "aspectRatio": 1.2878787878787878
   },
   "Sigh": {
     "images": [
@@ -170,7 +184,8 @@
     "offset": {
       "x": 0.4,
       "y": 0.15
-    }
+    },
+    "aspectRatio": 1.165289256198347
   },
   "Sad": {
     "images": [
@@ -181,7 +196,8 @@
     "offset": {
       "x": 0.4,
       "y": 0.0
-    }
+    },
+    "aspectRatio": 0.175
   },
   "Steam": {
     "images": [
@@ -192,7 +208,8 @@
     "offset": {
       "x": 0.5,
       "y": 0.1
-    }
+    },
+    "aspectRatio": 1.2993197278911566
   },
   "Zzz": {
     "images": [
@@ -203,7 +220,8 @@
     "offset": {
       "x": 0.45,
       "y": 0.1
-    }
+    },
+    "aspectRatio": 0.9787234042553191
   },
   "Tear": {
     "images": [
@@ -215,7 +233,8 @@
     "offset": {
       "x": 0.45,
       "y": 0.15
-    }
+    },
+    "aspectRatio": 0.7816091954022989
   },
   "Think": {
     "images": [
@@ -226,6 +245,7 @@
     "offset": {
       "x": 0,
       "y": -0.1
-    }
+    },
+    "aspectRatio": 1.1486486486486487
   }
 }

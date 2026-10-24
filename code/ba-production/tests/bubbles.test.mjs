@@ -51,3 +51,16 @@ test('geometry maps native Spine origin into PNG and scales without a guessed ce
   assert.throws(() => bubbleGeometry(presets.Shy, 600));
   assert.equal(presets.Shy.width, .46);
 });
+
+test('Dot keeps the official balloon-to-character size ratio and native dot spacing', () => {
+  assert.equal(presets.Dot.width, .16);
+  assert.equal(presets.Dot.aspectRatio, 255 / 198);
+  const layers = bubbleLayers('Dot', .8);
+  assert.equal(layers[1].width, 39 / (255 * presets.Dot.width));
+  assert.equal(layers[1].y, .35);
+  assert.equal(layers[2].x, .1 + 78 / 255);
+  assert.equal(layers[3].x, .1 + 156 / 255);
+  assert.ok(layers[1].opacity > .99);
+  assert.ok(layers[2].opacity > .99);
+  assert.equal(layers[3].opacity, 0);
+});

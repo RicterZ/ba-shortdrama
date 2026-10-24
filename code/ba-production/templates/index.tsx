@@ -518,7 +518,7 @@ const CharacterFigure: React.FC<{
               left: geometry.x,
               top: geometry.y,
               width: geometry.width,
-              aspectRatio: '1',
+              aspectRatio: preset.aspectRatio ?? 1,
               opacity,
               transform: cue.name === 'Shy' ? 'translate(-100%, -100%)' : undefined,
             }}>
