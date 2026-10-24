@@ -39,6 +39,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lib  # noqa: E402
+from sprite_coordinates import spine_match_lines  # noqa: E402
 
 API = "https://api.kivo.wiki/api/v1"
 SITE = "https://kivo.wiki"
@@ -316,6 +317,8 @@ def fetch_student(spec: str, *, slug: str = "", portrait: bool = False, spine: b
                 downloaded.append({"path": relative(meta["path"]), "sha256": meta["sha256"], "size": meta["size"], "url": url})
             assets["spine"].append({"id": spine_id, "name": name, "remark": detail.get("remark", ""), "files": downloaded})
             print(f"  脊柱（Live2D）: {name} ({len(downloaded)} 个文件)")
+        for line in spine_match_lines(directory):
+            print(line)
 
     if portrait:
         assets["flat_portrait"] = fetch_schaledb_portrait(student, kivo_dir / "portrait.webp", force=force)

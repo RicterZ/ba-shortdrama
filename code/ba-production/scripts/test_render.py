@@ -25,6 +25,18 @@ class RenderTest(unittest.TestCase):
         with patch.object(sys, 'argv', ['render.py', '--episode', 'test', '--mode', 'still']):
             self.assertIsNone(render.parse_args().profile)
 
+    def test_remotion_env_points_at_workspace_temp(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(render.lib, "ROOT", Path(tmp)):
+                env = render.remotion_env()
+            scratch = str(Path(tmp) / "temp" / "remotion")
+            self.assertEqual(env["TMPDIR"], scratch)
+            self.assertEqual(env["TEMP"], scratch)
+            self.assertEqual(env["TMP"], scratch)
+            self.assertTrue(Path(scratch).is_dir())
+
     def test_failure_propagates(self):
         import subprocess
         with patch('render.subprocess.run', side_effect=subprocess.CalledProcessError(1, 'test')):

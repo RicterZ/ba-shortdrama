@@ -213,6 +213,47 @@ class ShotLayoutTest(unittest.TestCase):
         self.assertEqual(shots[1]["characters"][0]["actions"], [{"name": "falldownL", "startFrame": 30}])
         self.assertEqual(shots[1]["characters"][0]["bubbles"], [{"name": "Shy", "startFrame": 40, "sound": False}])
 
+    def test_bubble_at_line_is_content_relative(self):
+        raw = board(1)
+        raw[0]["characters"] = [{
+            "id": "saiba-momoi",
+            "bubbles": [{"name": "Heart", "atLine": "L1", "offsetFrames": 6, "x": 12, "scale": 2, "duration": 90}],
+        }]
+        shots, _, _ = prepare.build_shots(raw, [line("L1", 0, frames=40)], TIMING, {}, {"saiba-momoi": "default"})
+        bubble = shots[0]["characters"][0]["bubbles"][0]
+        self.assertEqual(bubble, {"name": "Heart", "startFrame": 6, "sound": True})
+
+    def test_bubble_at_line_matches_line_end_plus_lead(self):
+        cfg = {"on": "every-cut", "type": "fade", "durationInFrames": 10}
+        timed = [line("L1", 0), line("L2", 100, frames=40)]
+        raw = board(2)
+        raw[1]["characters"] = [{
+            "id": "saiba-momoi",
+            "bubbles": [{"name": "Heart", "atLine": "L2", "offsetFrames": 46}],
+        }]
+        shots, _, _ = prepare.build_shots(raw, timed, TIMING, {}, {"saiba-momoi": "default"}, cfg)
+        line_item = shots[1]["lines"][0]
+        expected = line_item["from"] + line_item["durationInFrames"] - shots[1]["from"] + 6
+        self.assertEqual(shots[1]["characters"][0]["bubbles"][0]["startFrame"], expected)
+
+    def test_bubble_at_line_rejects_unknown_line_and_manual_mix(self):
+        raw = board(1)
+        raw[0]["characters"] = [{"id": "saiba-momoi", "bubbles": [{"name": "Heart", "atLine": "missing"}]}]
+        with self.assertRaises(SystemExit):
+            prepare.build_shots(raw, [line("L1", 0)], TIMING, {}, {"saiba-momoi": "default"})
+        raw[0]["characters"] = [{
+            "id": "saiba-momoi",
+            "bubbles": [{"name": "Heart", "atLine": "L1", "startFrame": 4}],
+        }]
+        with self.assertRaises(SystemExit):
+            prepare.build_shots(raw, [line("L1", 0)], TIMING, {}, {"saiba-momoi": "default"})
+        raw[0]["characters"] = [{
+            "id": "saiba-momoi",
+            "bubbles": [{"name": "Heart", "startFrame": 4, "offsetFrames": 2}],
+        }]
+        with self.assertRaises(SystemExit):
+            prepare.build_shots(raw, [line("L1", 0)], TIMING, {}, {"saiba-momoi": "default"})
+
     def test_invalid_bubbles_are_rejected(self):
         for cue in [
             {"name": "Invalid", "startFrame": 0},

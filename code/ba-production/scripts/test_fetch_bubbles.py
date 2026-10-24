@@ -30,6 +30,20 @@ class BubbleFetchTest(unittest.TestCase):
             self.assertEqual(len(records), len({item["path"] for item in records}))
             self.assertEqual((folder / "Emoticon_Shy.png").read_bytes(), b"existing-user-resource")
 
+    def test_sfx_failure_keeps_images_and_names_the_share(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            response = Mock(content=b"\x89PNG\r\n\x1a\nimage")
+            response.raise_for_status = Mock()
+            with patch.object(fetch_bubbles.lib, "ROOT", root), \
+                    patch.object(fetch_bubbles.requests, "get", return_value=response), \
+                    patch.object(fetch_bubbles.fetch_kivo, "fetch_sfx", side_effect=SystemExit("share password rejected")):
+                with self.assertRaises(SystemExit) as caught:
+                    fetch_bubbles.main()
+            self.assertIn("音效失败", str(caught.exception))
+            self.assertIn("share password rejected", str(caught.exception))
+            self.assertTrue(list((root / "data/effects/ba").glob("*.png")))
+
     def test_non_png_response_is_not_saved(self):
         with tempfile.TemporaryDirectory() as tmp:
             response = Mock(content=b"<html>error</html>")

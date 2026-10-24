@@ -18,7 +18,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lib  # noqa: E402
 
 BA_PRODUCTION = Path(__file__).resolve().parents[1]
-REMOTION = BA_PRODUCTION / "node_modules" / ".bin" / "remotion"
 COMPOSITION = "BAEpisode"
 TEMPLATES = {"blue-archive": BA_PRODUCTION / "templates" / "index.tsx"}
 DEFAULT_CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
@@ -70,11 +69,40 @@ def chrome_flags() -> list[str]:
     return flags
 
 
+def remotion_invocation() -> list[str]:
+    """Call the Remotion CLI with node.
+
+    ``node_modules/.bin/remotion`` is a shell script, so Windows cannot execute
+    it. ``node remotion-cli.js`` is the same entry point on every platform.
+    """
+    cli = BA_PRODUCTION / "node_modules" / "@remotion" / "cli" / "remotion-cli.js"
+    if not cli.is_file():
+        raise SystemExit(f"找不到 Remotion：{cli}，先在 code/ba-production 运行 npm install")
+    return [os.environ.get("NODE") or "node", str(cli)]
+
+
+def remotion_env() -> dict[str, str]:
+    """Point Remotion's pre-encode scratch at the workspace temp directory.
+
+    Remotion writes that scratch through the process temp dir. A sandbox that
+    blocks the system temp fails the encode unless TEMP/TMP/TMPDIR stay inside
+    the workspace.
+    """
+    env = os.environ.copy()
+    scratch = lib.ROOT / "temp" / "remotion"
+    scratch.mkdir(parents=True, exist_ok=True)
+    path = str(scratch)
+    env["TMPDIR"] = path
+    env["TEMP"] = path
+    env["TMP"] = path
+    return env
+
+
 def run(command: list[str]) -> None:
     print(">", " ".join(str(part) for part in command))
     started = time.monotonic()
     try:
-        subprocess.run([str(part) for part in command], cwd=BA_PRODUCTION, check=True)
+        subprocess.run([str(part) for part in command], cwd=BA_PRODUCTION, env=remotion_env(), check=True)
     finally:
         print(f"Render elapsed: {time.monotonic() - started:.2f}s", flush=True)
 
@@ -93,8 +121,7 @@ def main() -> int:
     fps = int(scene["episode"]["fps"])
     duration = int(scene["episode"]["durationInFrames"])
 
-    if not REMOTION.is_file():
-        raise SystemExit(f"找不到 Remotion：{REMOTION}，先在 code/ba-production 运行 npm install")
+    remotion = remotion_invocation()
 
     if args.mode in ("video", "both"):
         profile = PROFILES[args.profile]
@@ -111,7 +138,7 @@ def main() -> int:
         concurrency = args.concurrency if args.concurrency is not None else profile["concurrency"]
         run(
             [
-                REMOTION,
+                *remotion,
                 "render",
                 entry,
                 COMPOSITION,
@@ -142,7 +169,7 @@ def main() -> int:
             output = preview / f"frame-{frame:04d}.png"
             run(
                 [
-                    REMOTION,
+                    *remotion,
                     "still",
                     entry,
                     COMPOSITION,

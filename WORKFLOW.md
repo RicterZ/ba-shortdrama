@@ -79,7 +79,7 @@ npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-mom
 - `x` 是角色中心横坐标（0–1）；`bottom` 是底部偏移比例（默认 -0.25）；`height` 是画面高度占比（默认 1.08）；`scale` 是额外缩放。需要不同构图时在分镜里写 `height` / `bottom` 覆盖。
 - `entrance`：`none` / `fade-in` / `slide-in-left` / `slide-in-right`；滑入是纯平移，没有步伐起伏。
 - `motion`（可选）：镜头内的走位。`fromX` / `toX` 与 `fromBottom` / `toBottom` 是起点和终点的位置比例，`fromScale` / `toScale` 是缩放，`startFrame` / `endFrame` 相对镜头起点（省略时从 0 到镜头结束），`ease` 取 `linear` / `ease-in-out`。省略的起止值取角色当前的 `x` / `bottom` / `scale`。走位只做平移，不模拟走路；走完停在终点，后续镜头沿用同一个 `x` / `bottom`，不要每镜重新漂移。
-- `motion.hops`（可选）：把这段位移拆成几次跳跃，每次向前一截并起落一次，用来演被吓退、蹦跳这类反应；`hopLift` 是每次起跳的高度（相对画面高度，默认 0.05）。`ease` 对跳跃不起作用，落点仍然是 `toX` / `toBottom`，下一镜照样从落点接上。
+- `motion.hops`（可选）：把这段位移拆成几次跳跃，每次向前一截并起落一次，用来演被吓退、边退边跳；`hopLift` 是每次起跳的高度（相对画面高度，默认 0.05）。`ease` 对跳跃不起作用，落点仍然是 `toX` / `toBottom`，下一镜照样从落点接上。这是走位，人会从起点挪到终点。原地跳不要用它，用下面的 `actions`：`jump` 是吃惊单跳，`hophop` 是兴奋连跳两次，都不改 `x` / `bottom`。两套可以同时出现，互不替换：`hops` 管位置，`actions` 管姿态。
 - `facing`（可选）：`left` / `right`，默认 `right`（原图方向）；`left` 把立绘水平镜像。
 - `turns`（可选）：转身动画。`to` 是转向后的朝向，`atLine` 写该镜头内的一句台词 id（在该句开始时转身），或写 `startFrame`（相对镜头起点）；`durationInFrames` 默认 6。转身用水平镜像过渡表现，例如 Momoi 从看 Midori 转去看 Kei：
   ```json
@@ -273,7 +273,7 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 ### 角色内置动作（首批已接入）
 
 分镜角色可用 `actions`，时间为镜头内容起点后的帧数；prepare 自动补偿转场。
-动作、`emotionCues` 换脸与 `motion` 站位移动互相独立。
+动作、`emotionCues` 换脸与 `motion` 站位移动互相独立。吓退用 `motion.hops`；站在原地高兴地跳用 `hophop`。不要用两套去演同一次跳。
 
 ```json
 {"id":"saiba-momoi","actions":[{"name":"hophop","startFrame":12},{"name":"falldownR","startFrame":90}]}
@@ -293,7 +293,9 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 
 ### 气泡与配套音效
 
-先运行 `uv run python code/ba-production/scripts/fetch_bubbles.py` 获取固定版本图片及对应音效，不覆盖已有资源。图片及来源清单位于 `data/effects/ba/`，音效登记在 `data/audio/manifest.json`；代码来源和许可见 `THIRD_PARTY_NOTICES.md`，游戏素材的权利不因项目开源而转移。
+先运行 `uv run python code/ba-production/scripts/fetch_bubbles.py` 获取固定版本图片及对应音效，不覆盖已有资源。图片从 ba-archive 的固定提交拉取，清单在 `data/effects/ba/`；音效走 kivo 的 Cloudreve 分享，登记在 `data/audio/manifest.json`。分享失败时图片已经保存，报错只针对音效。代码来源和许可见 `THIRD_PARTY_NOTICES.md`，游戏素材的权利不因项目开源而转移。
+
+`npm run res:kivo -- student <id> --spine` 下载结束后，会用每套服装的默认立绘和每个 skel 比宽高比并打印接近或不符。差在 2% 以内只说明尺寸接近，脚本不会写入 `outfits.spine`；确认是同一套未裁切站立导出后再手写。之后 `fetch_sprites` 刷新服装时会保留已经写好的 `spine`。
 
 在 storyboard 的角色条目中加入 `bubbles`，与 `emotion`（换脸）及 `actions`（立绘动作）分别控制。例如：
 
@@ -301,12 +303,13 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 {
   "bubbles": [
     {"name": "Think", "startFrame": 15},
+    {"name": "Heart", "atLine": "L3", "offsetFrames": 6},
     {"name": "Shy", "startFrame": 75, "sound": false}
   ]
 }
 ```
 
-`name` 必须是下表大小写一致的预设名；`startFrame` 是镜头内容起点后的非负整数帧，prepare 自动补偿转场，不要重复加转场时长。`sound` 为布尔值，省略时默认 `true`，`false` 只关闭该气泡音效。音频播放自身长度（镜头结束仍会截断，应留足镜头时间）。不要填写未支持的 `x/y/scale/duration` 字段；当前 cue 不提供手动位置、大小或时长覆盖。
+`name` 必须是下表大小写一致的预设名。时间用 `startFrame` 或 `atLine` 二选一。`startFrame` 是镜头内容起点后的非负整数帧，prepare 自动补偿转场，不要重复加转场时长。`atLine` 写本镜头里的一句台词 id，对齐这句的内容起点；`offsetFrames` 是相对这句起点的帧数，和 `startFrame` 同一套时间，可以为负。台词结束后 6 帧出现时，把 `offsetFrames` 写成这句的帧数再加 6，不用自己减 `shot.from`。`sound` 为布尔值，省略时默认 `true`，`false` 只关闭该气泡音效。音频播放自身长度（镜头结束仍会截断，应留足镜头时间）。不要填写 `x/y/scale/duration`；位置、大小和时长仍由预设决定，不能按镜头改。
 
 | 气泡预设 | LLM 选择场景 |
 |---|---|
@@ -320,9 +323,11 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 | `Sweat` / `Sad` / `Tear` | 汗滴 / 低落竖线 / 泪水 |
 | `Steam` / `Sigh` / `Zzz` | 冒气 / 叹气 / 睡觉 |
 
-气泡约 0.5–2.35 秒（`Zzz` 三阶段依次显示约 2.35 秒），具体时长见 `code/ba-production/templates/bubble-presets.json`。同一角色后触发气泡替换前一个视觉效果，音效可重叠。气泡作为人物容器的子元素，继承站位、跳跃、进场位移、缩放、旋转、转向及隐藏。
+气泡约 0.5–2.35 秒（`Zzz` 三阶段依次显示约 2.35 秒），具体时长见 `code/ba-production/templates/bubble-presets.json`。同一角色后触发气泡替换前一个视觉效果，音效可重叠。气泡作为人物容器的子元素，继承站位、跳跃、进场位移、缩放、旋转、转向及隐藏。不得用 Dot、emoji 或换脸代替 Think/Shy。
 
-19 种曲线依据社区播放器转换为分层按帧演出，属于近似复现，不宣称官方逐帧一致。`Think` 上游缺处理函数，采用真实 `Emoticon_Balloon_T` 图和专用音效，入场/停留曲线为本项目自实现；仍需人工比对官方节奏。不得用 Dot、emoji 或换脸代替 Think/Shy。
+#### 实现备注
+
+19 种曲线依据社区播放器转换为分层按帧演出，属于近似复现，不宣称官方逐帧一致。`Think` 上游缺处理函数，采用真实 `Emoticon_Balloon_T` 图和专用音效，入场/停留曲线为本项目自实现；仍需人工比对官方节奏。
 
 气泡位置／大小使用固定参考坐标，而非按画面高度随意放置：参考半宽 540、半高 1012；
 每种预设的 `offset` / `width` 从上游 `emotionOptions.ts` 读取。

@@ -24,6 +24,34 @@ from sprite_coordinates import read_coordinates
 
 BUBBLE_PRESETS = json.loads((Path(__file__).resolve().parents[1] / "templates/bubble-presets.json").read_text())
 
+def resolve_bubble_frame(cue: dict, shot_lines: list[dict], start: int, lead: int, duration: int,
+                          shot_id: str, character_id: str) -> int:
+    """Content-relative bubble start. ``atLine`` aligns to a line; presets still own duration and placement."""
+    if cue.get("name") not in BUBBLE_PRESETS:
+        raise SystemExit(f"Invalid bubble cue: {cue!r}")
+    if "atLine" in cue and "startFrame" in cue:
+        raise SystemExit(f"镜头 {shot_id} 角色 {character_id} 的气泡不能同时写 atLine 和 startFrame")
+    offset = cue.get("offsetFrames", 0)
+    if isinstance(offset, bool) or not isinstance(offset, int):
+        raise SystemExit("bubbles.offsetFrames must be an integer")
+    if "atLine" in cue:
+        line = next((item for item in shot_lines if item["id"] == cue["atLine"]), None)
+        if line is None:
+            raise SystemExit(
+                f"镜头 {shot_id} 角色 {character_id} 的 bubbles.atLine={cue['atLine']!r} 不在该镜头台词中"
+            )
+        frame = (line["from"] - start - lead) + offset
+    else:
+        if "offsetFrames" in cue:
+            raise SystemExit("bubbles.offsetFrames 只能和 atLine 一起用")
+        frame = cue.get("startFrame", 0)
+        if isinstance(frame, bool) or not isinstance(frame, int):
+            raise SystemExit(f"Invalid bubble cue: {cue!r}")
+    if not (0 <= frame < duration - lead):
+        raise SystemExit(f"Bubble starts outside shot {shot_id}")
+    return frame
+
+
 def snapshot_bubbles(shots: list[dict], raws: Path) -> None:
     """Snapshot effect media; fail instead of silently rendering a missing effect."""
     for shot in shots:
@@ -370,13 +398,10 @@ def build_shots(
                 actions.append({"name": name, "startFrame": cue_frame})
             bubbles = []
             for cue in entry.get("bubbles") or []:
-                frame = cue.get("startFrame", 0)
-                if cue.get("name") not in BUBBLE_PRESETS or isinstance(frame, bool) or not isinstance(frame, int):
-                    raise SystemExit(f"Invalid bubble cue: {cue!r}")
-                if not (0 <= frame < duration - lead):
-                    raise SystemExit(f"Bubble starts outside shot {raw['id']}")
+                frame = resolve_bubble_frame(cue, shot_lines, start, lead, duration, raw["id"], entry["id"])
                 if not isinstance(cue.get("sound", True), bool):
                     raise SystemExit("bubbles.sound must be boolean")
+                # Presets own placement, scale, and duration. Authoring fields x/y/scale/duration are ignored.
                 bubbles.append({"name": cue["name"], "startFrame": frame + lead, "sound": cue.get("sound", True)})
             characters.append(
                 {

@@ -33,7 +33,16 @@ def main():
     additions = [item for item in entries if item["path"] not in known]
     if additions:
         manifest.write_text(json.dumps(existing + additions, indent=2) + "\n", encoding="utf-8")
-    fetch_kivo.fetch_sfx([f"SFX_Emoticon_Motion_{name}.wav" for name in PRESETS])
+    try:
+        fetch_kivo.fetch_sfx([f"SFX_Emoticon_Motion_{name}.wav" for name in PRESETS])
+    except (SystemExit, RuntimeError) as exc:
+        detail = exc.args[0] if exc.args else exc
+        raise SystemExit(
+            "气泡图片来自 ba-archive，已经保存，不会因为音效失败而回滚。"
+            "音效来自 kivo 的 Cloudreve 分享，和图片不是同一来源；"
+            "分享密码或分享地址变了，只影响音效。\n"
+            f"音效失败：{detail}"
+        ) from exc
 
 
 if __name__ == "__main__":

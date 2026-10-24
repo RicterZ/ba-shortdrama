@@ -475,7 +475,12 @@ def update_profile_outfits(directory: Path, manifest: dict) -> None:
         for alias, key in EXPRESSION_ALIASES.get(outfit["id"], {}).items():
             if key in sprites:
                 sprites.setdefault(alias, dict(sprites[key]))
-        outfits[outfit["id"]] = {"name": outfit["name"], "sprites": sprites}
+        previous = (profile.get("outfits") or {}).get(outfit["id"]) or {}
+        record = {"name": outfit["name"], "sprites": sprites}
+        spine = previous.get("spine")
+        if isinstance(spine, str) and spine:
+            record["spine"] = spine
+        outfits[outfit["id"]] = record
     profile["outfits"] = outfits
     profile["missing"] = []
     lib.write_json(path, profile)

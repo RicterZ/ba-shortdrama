@@ -319,8 +319,19 @@
                   "items": {
                     "type": "object",
                     "required": [
-                      "name",
-                      "startFrame"
+                      "name"
+                    ],
+                    "anyOf": [
+                      {
+                        "required": [
+                          "startFrame"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "atLine"
+                        ]
+                      }
                     ],
                     "additionalProperties": false,
                     "properties": {
@@ -351,6 +362,13 @@
                       "startFrame": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "atLine": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "offsetFrames": {
+                        "type": "integer"
                       },
                       "sound": {
                         "type": "boolean"

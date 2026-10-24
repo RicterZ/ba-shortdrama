@@ -103,6 +103,12 @@ def test_default_mapping() -> list[str]:
             }
         )
 
+    seeded = lib.load_json(character_dir / "profile.yaml")
+    seeded["outfits"] = {
+        "default": {"name": "旧", "spine": "kivo/spine/example/example.skel", "sprites": {}},
+    }
+    lib.write_json(character_dir / "profile.yaml", seeded)
+
     fs.update_profile_outfits(character_dir, manifest)
     profile = lib.load_json(character_dir / "profile.yaml")
     outfits = profile["outfits"]
@@ -125,6 +131,10 @@ def test_default_mapping() -> list[str]:
         failures.append("battle 的 default 没有指向 02")
     if profile.get("missing") != []:
         failures.append(f"完整抓取后 missing 应为空，实际 {profile.get('missing')!r}")
+    if outfits["default"].get("spine") != "kivo/spine/example/example.skel":
+        failures.append(f"刷新立绘时丢掉了手写的 spine：{outfits['default'].get('spine')!r}")
+    if "spine" in outfits["maid"]:
+        failures.append("没有手写 spine 的服装不应被写上 spine")
     return failures
 
 
