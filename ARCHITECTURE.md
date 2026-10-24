@@ -62,7 +62,7 @@ BGM 由 `episode.yaml` 的 `bgm` 块经 prepare 进入 scene.json；kivo 的 spi
 - 每个镜头是一个 `TransitionSeries.Sequence`；场景、角色、字幕、运镜都从 scene 数据生成。
 - 切点可以用官方 `@remotion/transitions` 的 `fade` / `slide` / `wipe` / `flip` / `clock-wipe` / `iris`。`episode.yaml` 的 `transitions` 决定默认策略（默认只在场景变化时加 12 帧 fade），单个镜头可在分镜里覆盖；镜头 `durationInFrames` 已包含与下一个镜头的重叠帧，prepare 同时在切点补等长静音，所以台词绝对帧与画面始终对齐。
 - `image-stage` 场景读取 `data/scenes/<id>/backgrounds/` 下的背景图，按变体叠加冷光/暖光、暗角和轻微推拉；模板不自行绘制房间。缺图时用场景 profile 的中性底色占位并警告。
-- 对白按游戏内实机样式：底部渐变压暗，白字姓名 + 青色社团名 + 细分割线 + 白字台词 + 右下闪烁青色三角，`intro` 是可选的 BA 风格标题卡（全宽浅蓝切面带、`Episode N` + 黄色下划线 + 深蓝大标题），删掉 `episode.yaml` 的 `intro` 就不会出现。
+- 对白按游戏内实机样式：底部渐变压暗，白字姓名 + 青色社团名 + 细分割线 + 白字台词 + 右下闪烁青色三角，`intro` 是可选的 BA 风格标题卡（全宽浅蓝切面带、`Episode N` + 黄色下划线 + 深蓝大标题）。删掉 `episode.yaml` 的 `intro` 后模板不画标题卡，prepare 也不再预留 `timing.intro_frames`。
 - 分镜可选的 `choices` 会渲染成浅蓝切面平行四边形选择条（深蓝居中文字），出现/确认/消失由 `fromFrame` / `selectFrame` / `hideFrame` 控制；`buttons` 渲染斜切按钮并支持 `pressFrame` 点击。
 - 点击音与点击特效：对白推进、选项出现/确认、按钮按下播放 `ui.sfx` 里的 BA 音效；按钮和选项确认同时触发扩散虚线圆环 + 菱形火花。音效来源与许可见 `data/ui/manifest.json`，token 见 `docs/UI.md`。
 - 画面不压水印；合成语音/非官方同人说明放在 `review.json` 和视频简介里。
