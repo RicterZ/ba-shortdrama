@@ -43,6 +43,7 @@ type SceneDef = {
 
 type Outfit = {
   name: string;
+  spineBounds?: {x: number; y: number; width: number; height: number; imageWidth: number; imageHeight: number};
   sprites: Record<string, string>;
   fallbacks?: string[];
 };
@@ -487,39 +488,38 @@ const CharacterFigure: React.FC<{
           filter: 'blur(14px)',
         }}
       />
-      <Img
-        src={staticFile(sprite)}
+      <div
         style={{
           position: 'absolute',
           left: `${px * 100}%`,
           bottom: `${pBottom * 100}%`,
           height: `${entry.height * 100}%`,
-          width: 'auto',
+          width: outfit.spineBounds ? height * entry.height * outfit.spineBounds.imageWidth / outfit.spineBounds.imageHeight : 'max-content',
           transform: `translateX(-50%) translate(${tx}px, 0px) translate(${action.x * 100}%, ${action.y * 100}%) scale(${poseScale * action.scale}) rotate(${action.angle}deg) scaleX(${flip})`,
           transformOrigin: action.origin,
           opacity: (entry.entrance === 'fade-in' ? entrance : 1) * action.opacity,
-          filter: isDimmed
-            ? 'brightness(0.66) saturate(0.82) drop-shadow(0 10px 22px rgba(20,30,45,0.20))'
-            : 'drop-shadow(0 16px 30px rgba(20,30,45,0.22))',
         }}
-      />
+      >
+        <Img src={staticFile(sprite)} style={{height: '100%', width: 'auto', display: 'block', filter: isDimmed
+          ? 'brightness(0.66) saturate(0.82) drop-shadow(0 10px 22px rgba(20,30,45,0.20))'
+          : 'drop-shadow(0 16px 30px rgba(20,30,45,0.22))'}} />
       {(entry.bubbles ?? []).map((cue, index) => {
         const seconds = (frame - cue.startFrame) / fps;
         const preset = bubblePresets[cue.name];
         const opacity = bubbleOpacity(seconds, preset.seconds);
-        const spriteHeight = height * entry.height * poseScale * action.scale;
-        const geometry = bubbleGeometry(preset, spriteHeight);
+        const spriteHeight = height * entry.height;
+        const geometry = bubbleGeometry(preset, spriteHeight, outfit.spineBounds);
         const images = cue.images ?? [cue.balloon, cue.image];
         return <React.Fragment key={index}>
           {cue.sound !== false && cue.audio ? <Sequence from={cue.startFrame}><Audio src={staticFile(cue.audio)} volume={0.5} /></Sequence> : null}
           {cue === latestBubble && opacity > 0 ? (
             <div style={{
               position: 'absolute',
-              left: `calc(${px * 100}% + ${tx + geometry.x}px)`,
-              top: height * (1 - ground - lift) - spriteHeight / 2 + geometry.y,
+              left: geometry.x,
+              top: geometry.y,
               width: geometry.width,
               aspectRatio: '1',
-              opacity: opacity * action.opacity,
+              opacity,
               transform: cue.name === 'Shy' ? 'translate(-100%, -100%)' : undefined,
             }}>
               {bubbleLayers(cue.name, seconds).map((layer, i) => images[layer.image] ? <Img key={i} src={staticFile(images[layer.image]!)} style={{position: 'absolute', width: `${layer.width * 100}%`, left: `${layer.x * 100}%`, top: `${layer.y * 100}%`, opacity: layer.opacity, transform: `rotate(${layer.angle}deg) scale(${layer.scale})`}} /> : null)}
@@ -527,6 +527,7 @@ const CharacterFigure: React.FC<{
           ) : null}
         </React.Fragment>;
       })}
+      </div>
     </>
   );
 };

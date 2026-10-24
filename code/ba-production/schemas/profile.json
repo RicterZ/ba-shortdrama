@@ -155,6 +155,10 @@
                 }
               }
             }
+          },
+          "spine": {
+            "type": "string",
+            "minLength": 1
           }
         }
       }

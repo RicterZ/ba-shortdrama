@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lib  # noqa: E402
 import voice  # noqa: E402
+from sprite_coordinates import read_coordinates
 
 BUBBLE_PRESETS = json.loads((Path(__file__).resolve().parents[1] / "templates/bubble-presets.json").read_text())
 
@@ -624,6 +625,17 @@ def main() -> int:
                 )
 
     intro_cfg = config.get("intro")
+    for shot in shots:
+        for entry in shot["characters"]:
+            if not entry.get("bubbles"):
+                continue
+            cid, oid = entry["id"], entry["outfit"]
+            char = characters[cid]
+            skeleton = char["profile"]["outfits"][oid].get("spine")
+            if not skeleton:
+                raise SystemExit(f"{cid}/{oid}: bubbles require a matching outfit.spine export; refusing guessed coordinates")
+            scene_outfits[cid][oid]["spineBounds"] = read_coordinates(
+                char["dir"] / skeleton, char["outfits"][oid]["sprites"]["default"]["path"])
     intro = None
     if intro_cfg:
         intro = {
@@ -665,6 +677,7 @@ def main() -> int:
                         "name": characters[cid]["outfits"][outfit_id]["name"],
                         "sprites": bucket["sprites"],
                         "fallbacks": sorted(bucket["fallbacks"]),
+                        "spineBounds": bucket.get("spineBounds"),
                     }
                     for outfit_id, bucket in sorted(scene_outfits[cid].items())
                 },

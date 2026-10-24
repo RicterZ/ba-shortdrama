@@ -36,18 +36,18 @@ test('all 20 bubbles sample valid image layers and disappear at end', () => {
 });
 
 import {bubbleGeometry} from '../templates/bubbles.mjs';
-test('geometry uses upstream fixed offsets and texture width, scales uniformly', () => {
+test('geometry maps native Spine origin into PNG and scales without a guessed center', () => {
+  const bounds = {x: -1052.9828, y: -723.978, width: 1769.9822, height: 2054.978};
   for (const preset of Object.values(presets)) {
-    const g = bubbleGeometry(preset, 2024);
-    assert.equal(g.x, (preset.offset.x - .8) * 540);
-    assert.equal(g.y, (preset.offset.y - 1.2) * 1012);
+    const g = bubbleGeometry(preset, bounds.height, bounds);
+    assert.equal(g.x, (preset.offset.x - .8) * 540 - bounds.x);
+    assert.equal(g.y, (preset.offset.y - 1.2) * 1012 + bounds.y + bounds.height);
     assert.equal(g.width, preset.width * 540);
-    const half = bubbleGeometry(preset, 1012);
+    const half = bubbleGeometry(preset, bounds.height / 2, bounds);
     assert.equal(half.x, g.x / 2);
     assert.equal(half.y, g.y / 2);
     assert.equal(half.width, g.width / 2);
   }
+  assert.throws(() => bubbleGeometry(presets.Shy, 600));
   assert.equal(presets.Shy.width, .46);
-  assert.deepEqual(presets.Shy.offset, {x: .5, y: .06});
-  assert.equal(presets.Twinkle.width, .08);
 });

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Shy timing adapted from ba-archive emotionPlayer.ts / emotionOptions.ts.
-// The PNG adapter uses the same centered 1080 x 2024 reference plane as
-// the upstream 540 / 1012 half-extents, not viewport-relative magic offsets.
-export function bubbleGeometry(preset, spriteHeight) {
-  const scale = spriteHeight / 2024;
+// Native export bounds locate the skeleton origin inside the uncropped PNG.
+export function bubbleGeometry(preset, spriteHeight, bounds) {
+  if (!bounds || !(bounds.height > 0)) throw new Error('Bubble requires matching Spine bounds');
+  const scale = spriteHeight / bounds.height;
   return {
-    x: (preset.offset.x - .8) * 540 * scale,
-    y: (preset.offset.y - 1.2) * 1012 * scale,
+    x: ((preset.offset.x - .8) * 540 - bounds.x) * scale,
+    y: ((preset.offset.y - 1.2) * 1012 + bounds.y + bounds.height) * scale,
     width: preset.width * 540 * scale,
   };
 }
