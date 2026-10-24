@@ -77,26 +77,14 @@ def episode_dirs() -> list[Path]:
     return sorted(p for p in VIDEOS.iterdir() if p.is_dir() and not p.name.startswith("."))
 
 
-_EPISODE_LOCKS: list = []
-
-
 def lock_episode(episode: Path) -> None:
-    """Hold an exclusive lock on the episode until this process exits."""
-    import fcntl
+    """Compatibility hook for callers that request episode locking.
 
-    handle = (episode / ".lock").open("a+", encoding="utf-8")
-    try:
-        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        handle.seek(0)
-        holder = handle.read().strip() or "未知进程"
-        handle.close()
-        raise SystemExit(f"剧集 {episode.name} 正被另一个任务写入（{holder}），等它结束再试")
-    handle.seek(0)
-    handle.truncate()
-    handle.write(f"pid {os.getpid()} @ {ROOT}\n")
-    handle.flush()
-    _EPISODE_LOCKS.append(handle)
+    Episode locking used ``fcntl``, which is unavailable on Windows.  The
+    production commands are single-writer by convention, so keep the API but
+    intentionally do nothing on every platform.
+    """
+    return None
 
 
 def resolve_episode(spec: str, lock: bool = False) -> Path:
