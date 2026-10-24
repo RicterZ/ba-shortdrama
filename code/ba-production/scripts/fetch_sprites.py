@@ -153,8 +153,12 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def wikitext(page: str) -> str:
-    payload = api(action="parse", page=page, prop="wikitext")
+def wikitext(page: str, force: bool = False) -> str:
+    CACHE.mkdir(parents=True, exist_ok=True)
+    cache = CACHE / f"page-{hashlib.sha256(page.encode()).hexdigest()}.json"
+    payload = json.loads(cache.read_text(encoding="utf-8")) if cache.is_file() and not force else api(action="parse", page=page, prop="wikitext")
+    if force or not cache.is_file():
+        cache.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     if "error" in payload:
         raise SystemExit(f"wiki 页面不存在：{page}（{payload['error'].get('info')}）")
     return payload["parse"]["wikitext"]
@@ -202,13 +206,19 @@ def parse_outfits(page_text: str) -> list[dict]:
     return outfits
 
 
-def image_urls(files: list[str]) -> dict[str, dict]:
+def image_urls(files: list[str], force: bool = False) -> dict[str, dict]:
     """Resolve File: titles to direct URLs, sizes and mime in batches of 50."""
     resolved: dict[str, dict] = {}
     for start in range(0, len(files), 50):
         batch = files[start : start + 50]
         titles = "|".join(f"File:{name}" for name in batch)
-        payload = api(action="query", prop="imageinfo", iiprop="url|size|mime", titles=titles)
+        CACHE.mkdir(parents=True, exist_ok=True)
+        cache = CACHE / f"images-{hashlib.sha256(titles.encode()).hexdigest()}.json"
+        if cache.is_file() and not force:
+            payload = json.loads(cache.read_text(encoding="utf-8"))
+        else:
+            payload = api(action="query", prop="imageinfo", iiprop="url|size|mime", titles=titles)
+            cache.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         for page in payload.get("query", {}).get("pages", []):
             info = (page.get("imageinfo") or [{}])[0]
             if not info.get("url"):
@@ -233,9 +243,9 @@ def resolve_image(resolved: dict[str, dict], filename: str) -> dict | None:
     return None
 
 
-def download(url: str, dest: Path) -> dict:
+def download(url: str, dest: Path, force: bool = False) -> dict:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.is_file():
+    if dest.is_file() and not force:
         return {"path": dest, "size": dest.stat().st_size, "sha256": sha256_file(dest), "reused": True}
     data = fetch(url)
     temporary = dest.with_name(dest.name + ".part")
@@ -284,9 +294,9 @@ def contact_sheet(sprites: list[dict], out: Path) -> None:
 
 
 def fetch_character(page_name: str, *, slug: str = "", update_profile: bool = True,
-                    contact: bool = False) -> Path:
+                    contact: bool = False, force: bool = False) -> Path:
     page = page_name if "/" in page_name else f"{page_name}/gallery"
-    page_text = wikitext(page)
+    page_text = wikitext(page, force=force)
     outfits = parse_outfits(page_text)
     if not outfits:
         raise SystemExit(f"{page} 没有找到立绘分组")
@@ -296,7 +306,7 @@ def fetch_character(page_name: str, *, slug: str = "", update_profile: bool = Tr
     sprites_root = directory / "sprites"
 
     all_files = [name for outfit in outfits for name in outfit["files"]]
-    resolved = image_urls(all_files)
+    resolved = image_urls(all_files, force=force)
     missing = [name for name in all_files if resolve_image(resolved, name) is None]
     if missing:
         raise SystemExit(
@@ -335,7 +345,7 @@ def fetch_character(page_name: str, *, slug: str = "", update_profile: bool = Tr
                 raise SystemExit(f"错误：{outfit['section']} 的 {filename} 没有解析到 URL，已中止")
             key = sprite_key(filename)
             dest = outfit_dir / f"{key}.png"
-            meta = download(info["url"], dest)
+            meta = download(info["url"], dest, force=force)
             if not dest.is_file():
                 raise SystemExit(f"错误：{filename} 下载后文件不存在：{dest}")
             with Image.open(dest) as image:
@@ -498,12 +508,13 @@ def main() -> int:
     get_cmd.add_argument("--slug", default="", help="角色目录名，默认从 kivo summary 的英文名推断")
     get_cmd.add_argument("--no-profile", action="store_true", help="只写 manifest，不改 profile.yaml")
     get_cmd.add_argument("--contact", action="store_true", help="额外生成每套服装的缩略图总览")
+    get_cmd.add_argument("--force", action="store_true", help="刷新 wiki 页面、图片索引和已下载图片")
 
     args = parser.parse_args()
     if args.command == "list":
         list_outfits(args.page)
         return 0
-    fetch_character(args.page, slug=args.slug, update_profile=not args.no_profile, contact=args.contact)
+    fetch_character(args.page, slug=args.slug, update_profile=not args.no_profile, contact=args.contact, force=args.force)
     return 0
 
 

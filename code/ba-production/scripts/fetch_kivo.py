@@ -179,24 +179,43 @@ def student_list(name: str = "", page_size: int = 100) -> list[dict]:
     return students
 
 
-def resolve_student(spec: str) -> dict:
+def resolve_student(spec: str, force: bool = False) -> dict:
     """Accept a kivo student id or a (partial) Chinese / English name."""
+    key = hashlib.sha256(spec.casefold().encode()).hexdigest()
+    cache = CACHE / "students" / f"{key}.json"
+    if cache.is_file() and not force:
+        return lib.load_json(cache)
+    for path in CHARACTERS.glob("*/originals/kivo-student.json"):
+        student = lib.load_json(path)
+        names = [
+            "".join(student.get(field, "") or "" for field in (f"family_name_{lang}", f"given_name_{lang}"))
+            for lang in ("cn", "jp", "zh_tw", "kr")
+        ]
+        family, given = student.get("family_name_en") or "", student.get("given_name_en") or ""
+        names.extend((f"{family} {given}".strip(), f"{given} {family}".strip()))
+        if not force and (str(student.get("id")) == spec or any(spec.casefold() in name.casefold() for name in names if name)):
+            lib.write_json(cache, student)
+            return student
     if spec.isdigit():
-        return api(f"/data/students/{spec}")
+        student = api(f"/data/students/{spec}")
+        lib.write_json(cache, student)
+        return student
     matches = student_list(name=spec)
     if not matches:
         raise SystemExit(f"kivo 上找不到学生：{spec}")
     if len(matches) > 1:
         lines = [f"{item['id']}\t{item.get('family_name_cn','')}{item.get('given_name_cn','')}\t{item.get('skin_cn') or item.get('skin','')}" for item in matches[:20]]
         raise SystemExit("匹配到多个学生，请改用 id：\n" + "\n".join(lines))
-    return api(f"/data/students/{matches[0]['id']}")
+    student = api(f"/data/students/{matches[0]['id']}")
+    lib.write_json(cache, student)
+    return student
 
 
 def lookup_table(path: str, key: str, force: bool = False) -> dict[int, dict]:
-    """Cache small reference tables (schools, relations) for a day."""
+    """Reuse reference tables until explicitly refreshed."""
     CACHE.mkdir(parents=True, exist_ok=True)
     cache = CACHE / f"{key}.json"
-    if cache.is_file() and not force and time.time() - cache.stat().st_mtime < 86400:
+    if cache.is_file() and not force:
         rows = json.loads(cache.read_text(encoding="utf-8"))
     else:
         rows = api(path, page=1, page_size=500).get(key) or []
@@ -221,7 +240,7 @@ def prefixed(url: str) -> str:
 
 def fetch_student(spec: str, *, slug: str = "", portrait: bool = False, spine: bool = False,
                   diffs: bool = True, force: bool = False) -> Path:
-    student = resolve_student(spec)
+    student = resolve_student(spec, force=force)
     slug = slug or student_slug(student)
     directory = CHARACTERS / slug
     kivo_dir = directory / "kivo"
@@ -230,8 +249,8 @@ def fetch_student(spec: str, *, slug: str = "", portrait: bool = False, spine: b
     raw_path = directory / "originals" / "kivo-student.json"
     lib.write_json(raw_path, student)
 
-    schools = lookup_table("/data/schools/", "school")
-    relations = lookup_table("/data/relations/", "relation")
+    schools = lookup_table("/data/schools/", "school", force=force)
+    relations = lookup_table("/data/relations/", "relation", force=force)
     school = schools.get(student.get("school"), {})
     club = relations.get(student.get("main_relation"), {})
 
@@ -280,7 +299,12 @@ def fetch_student(spec: str, *, slug: str = "", portrait: bool = False, spine: b
 
     if spine:
         for spine_id in student.get("spine") or []:
-            detail = api(f"/data/spines/{spine_id}")
+            detail_path = CACHE / "spines" / f"{spine_id}.json"
+            if detail_path.is_file() and not force:
+                detail = lib.load_json(detail_path)
+            else:
+                detail = api(f"/data/spines/{spine_id}")
+                lib.write_json(detail_path, detail)
             name = detail.get("name") or f"spine-{spine_id}"
             spine_dir = kivo_dir / "spine" / name
             files = [detail.get("skel_file"), detail.get("atlas_file"), *(detail.get("images") or [])]
@@ -420,7 +444,7 @@ def fetch_schaledb_portrait(student: dict, dest: Path, force: bool = False) -> d
 
     CACHE.mkdir(parents=True, exist_ok=True)
     cache = CACHE / "schaledb-students.json"
-    if cache.is_file() and not force and time.time() - cache.stat().st_mtime < 7 * 86400:
+    if cache.is_file() and not force:
         rows = json.loads(cache.read_text(encoding="utf-8"))
     else:
         rows = json.loads(fetch(SCHALEDB_STUDENTS, timeout=180))
@@ -451,7 +475,11 @@ def fetch_schaledb_portrait(student: dict, dest: Path, force: bool = False) -> d
 # ── kivo music (BGM) ────────────────────────────────────────────────────────
 
 
-def music_catalog() -> list[dict]:
+def music_catalog(force: bool = False) -> list[dict]:
+    CACHE.mkdir(parents=True, exist_ok=True)
+    cache = CACHE / "music-catalog.json"
+    if cache.is_file() and not force:
+        return json.loads(cache.read_text(encoding="utf-8"))
     tracks: list[dict] = []
     page = 1
     while True:
@@ -461,6 +489,7 @@ def music_catalog() -> list[dict]:
         if not batch or page >= int(data.get("max_page") or 1):
             break
         page += 1
+    cache.write_text(json.dumps(tracks, ensure_ascii=False), encoding="utf-8")
     return tracks
 
 
@@ -483,11 +512,16 @@ def music_matches(tracks: list[dict], needle: str) -> list[dict]:
 
 
 def fetch_music(specs: list[str], force: bool = False) -> None:
-    catalog = music_catalog()
+    catalog = music_catalog(force=force)
     chosen: list[dict] = []
     for spec in specs:
         if spec.isdigit():
-            detail = api(f"/musics/{spec}")
+            detail_path = CACHE / "music-details" / f"{int(spec)}.json"
+            if detail_path.is_file() and not force:
+                detail = lib.load_json(detail_path)
+            else:
+                detail = api(f"/musics/{spec}")
+                lib.write_json(detail_path, detail)
             chosen.append(detail)
             continue
         matches = music_matches(catalog, spec)
@@ -496,7 +530,14 @@ def fetch_music(specs: list[str], force: bool = False) -> None:
         if len(matches) > 1:
             listing = "\n".join(f"{t['id']}\t{t['title']}\t{t.get('use','')}" for t in matches[:15])
             raise SystemExit(f"{spec} 匹配到多首，请改用 id：\n{listing}")
-        chosen.append(api(f"/musics/{matches[0]['id']}"))
+        track_id = matches[0]["id"]
+        detail_path = CACHE / "music-details" / f"{int(track_id)}.json"
+        if detail_path.is_file() and not force:
+            detail = lib.load_json(detail_path)
+        else:
+            detail = api(f"/musics/{track_id}")
+            lib.write_json(detail_path, detail)
+        chosen.append(detail)
 
     entries = []
     for track in chosen:
@@ -581,7 +622,7 @@ class KivoShare:
 def sfx_catalog(force: bool = False) -> list[dict]:
     CACHE.mkdir(parents=True, exist_ok=True)
     cache = CACHE / "sfx-catalog.json"
-    if cache.is_file() and not force and time.time() - cache.stat().st_mtime < 7 * 86400:
+    if cache.is_file() and not force:
         return json.loads(cache.read_text(encoding="utf-8"))
     share = KivoShare()
     objects = share.objects("/")
@@ -600,7 +641,7 @@ def sfx_catalog(force: bool = False) -> list[dict]:
 
 
 def fetch_sfx(names: list[str], force: bool = False) -> None:
-    catalog = sfx_catalog()
+    catalog = sfx_catalog(force=force)
     available = {item["name"]: item for item in catalog}
     missing = [name for name in names if name not in available and f"{name}.wav" not in available]
     if missing:
@@ -757,13 +798,14 @@ def main() -> int:
     get_cmd.add_argument("--portrait", action="store_true", help="额外从 SchaleDB 取平面全身立绘")
     get_cmd.add_argument("--spine", action="store_true", help="下载 Live2D spine 立绘包")
     get_cmd.add_argument("--no-diffs", action="store_true", help="不下载表情差分")
-    get_cmd.add_argument("--force", action="store_true")
+    get_cmd.add_argument("--force", action="store_true", help="刷新缓存资料并重新下载素材")
 
     music_cmd = sub.add_parser("music", help="BGM（kivo 音乐库）")
     music_sub = music_cmd.add_subparsers(dest="music_command", required=True)
     mlist = music_sub.add_parser("list", help="列出曲目")
     mlist.add_argument("--match", default="", help="标题 / 原文件名片段")
     mlist.add_argument("--limit", type=int, default=40)
+    mlist.add_argument("--refresh", action="store_true", help="刷新目录缓存")
     mget = music_sub.add_parser("get", help="按 id 或标题下载")
     mget.add_argument("specs", nargs="+")
     mget.add_argument("--force", action="store_true")
@@ -805,7 +847,7 @@ def main() -> int:
 
     if args.command == "music":
         if args.music_command == "list":
-            rows = music_catalog()
+            rows = music_catalog(force=args.refresh)
             if args.match:
                 rows = music_matches(rows, args.match)
             if args.limit:

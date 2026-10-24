@@ -140,10 +140,10 @@ def test_missing_url_aborts_without_overwrite() -> list[str]:
 
     original = (fs.CHARACTERS, fs.wikitext, fs.image_urls, fs.download)
     fs.CHARACTERS = WORK / "characters"
-    fs.wikitext = lambda page: PAGE
-    fs.image_urls = lambda files: {"Test_00.png": {"url": "https://example.invalid/Test_00.png"}}
+    fs.wikitext = lambda page, force=False: PAGE
+    fs.image_urls = lambda files, force=False: {"Test_00.png": {"url": "https://example.invalid/Test_00.png"}}
 
-    def unexpected_download(url: str, dest: Path) -> dict:
+    def unexpected_download(url: str, dest: Path, force: bool = False) -> dict:
         raise AssertionError(f"缺 URL 时不应开始下载：{url}")
 
     fs.download = unexpected_download
