@@ -4,7 +4,11 @@
 
 ## 快速开始
 
-把这个仓库地址交给你的 DeepSeek Hareness / Claude / Codex / Cursor，对她说：「请先安装这个项目，我想用这个项目生成视频：生成一段5s地视频，不要开头的 episode 展示，视频内容为才羽桃井在游戏开发部室里笑着并且雀跃地对我说“你好！老师！”，说完话后弹出爱心气泡。」
+把这个仓库地址交给你的 DeepSeek Hareness / Claude / Codex / Cursor，对她说：
+```text
+请先安装 RicterZ/ba-shortdrama 项目，我想用这个项目生成视频：生成一段5s地视频，不要开头的 episode 展示，视频内容为才羽桃井在游戏开发部室里笑着并且雀跃地对我说“你好！老师！”，说完话后弹出爱心气泡。
+```
+你会得到如下视频：
 
 https://github.com/user-attachments/assets/39d2ecca-8bbb-4426-875f-5b2a94759027
 
