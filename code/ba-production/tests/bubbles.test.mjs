@@ -26,7 +26,8 @@ test('Yuuka screenshot anchor matches measured screen coordinates and scales wit
   assert.ok(Math.abs(g.width - 193.8) < .01);
   const zoom = bubbleGeometry(presets.Dot, h * 1.5, bounds, 'Dot');
   for (const [name, preset] of Object.entries(presets)) {
-    assert.deepEqual(bubbleGeometry(preset, h, bounds, name), g);
+    if (preset.images[0].startsWith('Emoticon_Balloon_')) assert.deepEqual(bubbleGeometry(preset, h, bounds, name), g);
+    else assert.ok(bubbleGeometry(preset, h, bounds, name).width < g.width);
   }
   for (const key of ['x', 'y', 'width']) assert.ok(Math.abs(zoom[key] - g[key] * 1.5) < 1e-8);
   const dots = bubbleLayers('Dot', .8, anchors.Dot);
@@ -35,6 +36,24 @@ test('Yuuka screenshot anchor matches measured screen coordinates and scales wit
 test('Angry and Respond retain upstream pivots instead of rotating at CSS center', () => {
   assert.deepEqual(bubbleLayers('Angry', .1).map(p => [p.anchorX, p.anchorY]), [[.35, -.05], [.35, -.05], [.35, -.05]]);
   assert.deepEqual(bubbleLayers('Respond', .1).map(p => p.anchorX), [1.8, 1.5, 1.8]);
+});
+test('review fixes retain native image ratios, independent scale axes and timed phases', () => {
+  const sweat = bubbleLayers('Sweat', .2);
+  assert.equal(sweat[1].width, 46 / 74);
+  const surprise = bubbleLayers('Surprise', .3);
+  assert.equal(surprise[1].width, 103 / 60);
+  assert.equal(surprise[1].scaleY, 1);
+  const sigh = bubbleLayers('Sigh', .4)[0];
+  assert.equal(sigh.x, 0);
+  assert.equal(sigh.y, 0);
+  assert.equal(sigh.anchorX, 1);
+  assert.equal(sigh.anchorY, -.2);
+  assert.equal(bubbleLayers('Sigh', 1)[0].opacity, 0);
+  assert.equal(bubbleLayers('Steam', 1).reduce((sum, p) => sum + p.opacity, 0), 0);
+  assert.deepEqual(bubbleLayers('Zzz', .2).map(p => p.opacity), [1, 0, 0]);
+  assert.deepEqual(bubbleLayers('Zzz', 1).map(p => p.opacity), [1, 1, 0]);
+  assert.deepEqual(bubbleLayers('Zzz', 1.9).map(p => p.opacity), [1, 1, 1]);
+  assert.ok(presets.Zzz.seconds > 1.9);
 });
 test('all 20 bubbles sample valid image layers and disappear at end', () => {
   assert.equal(Object.keys(presets).length, 20);

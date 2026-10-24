@@ -4,7 +4,7 @@
 export function bubbleGeometry(preset, spriteHeight, bounds, name) {
   if (!bounds || !(bounds.height > 0)) throw new Error('Bubble requires matching Spine bounds');
   const scale = spriteHeight / bounds.height;
-  const calibration = bounds.bubbleAnchors?.[name] ?? bounds.bubbleAnchors?.Dot;
+  const calibration = bounds.bubbleAnchors?.[name] ?? (preset.images[0].startsWith('Emoticon_Balloon_') ? bounds.bubbleAnchors?.Dot : undefined);
   if (calibration) return {
     x: calibration.x * spriteHeight * bounds.imageWidth / bounds.imageHeight,
     y: calibration.y * spriteHeight,
@@ -37,6 +37,8 @@ const clamp = (v) => Math.max(0, Math.min(1, v));
 export function bubbleLayers(name, t, calibration) {
   const layer = (image, x = 0, y = 0, width = 1, scale = 1, angle = 0, opacity = 1) =>
     ({image, x, y, width, scale, angle, opacity});
+  const anchored = (pose, x, y) => ({...pose, anchorX: x, anchorY: y});
+  const out = (v) => 1 - Math.pow(1 - clamp(v), 5);
   const wave = (period) => Math.sin(t / period * Math.PI * 2);
   switch (name) {
     // Independent fallback: the real thought balloon, not Dot/ellipsis.
@@ -65,14 +67,14 @@ export function bubbleLayers(name, t, calibration) {
     case 'Angry': return [0, 1, 2].map((i) => layer(0, 0, 0, 1, t < .4 ? 1 - .1 * Math.sin(Math.PI * t / .4) : 1 - .8 * clamp((t - .4) / .1), i * 120)).map((pose) => ({...pose, anchorX: .35, anchorY: -.05}));
     case 'Music': return [layer(0, -clamp(t / .9), .1 * wave(.5), 1, .7 + .3 * clamp(t / .1), -8 * wave(.5))];
     case 'Respond': return [-10, 23, 50].map((angle, i) => ({...layer(0, 0, 0, i === 1 ? 2 : 1.4, 1, angle, .2 + .8 * Math.abs(wave(.6))), anchorX: i === 1 ? 1.5 : 1.8, anchorY: 0}));
-    case 'Twinkle': return [[0, .3, .4], [.45, 0, .36], [.5, .6, .24]].map(([x, y, w], i) => layer(0, x, y, w, 1 + .2 * Math.sin(t / [.5, .6, .4][i] * Math.PI * 2)));
-    case 'Sweat': return [layer(0, 0, clamp(t / .4) * .4, .45), layer(1, .5, -.2 + clamp(t / .4) * .9, .35)];
-    case 'Surprise': return [layer(0, -.1 * clamp(t / .3), -.1 * Math.sin(Math.PI * clamp(t / .3)), .4, .7 + .3 * clamp(t / .3), -10), layer(1, .5, 0, .4, .7 + .3 * clamp(t / .3), 15)];
-    case 'Sad': return [0, 1, 2].map((i) => layer(0, i * .25, .2 * clamp((t - i / 6) / .3), .25, .5 + .5 * clamp((t - i / 6) / .3), 0, clamp((t - i / 6) * 15)));
-    case 'Steam': return [layer(0, 0, 0, .6, .1 + .6 * clamp(t), -30), layer(0, .4, -.1, .6, .6 + .3 * clamp(t))];
-    case 'Sigh': return [layer(0, .2 * clamp(t), .1 * clamp(t), 1, .3 + .6 * clamp(t))];
-    case 'Tear': return [layer(0, 0, .2, 1, .5 + .5 * clamp(t)), layer(1, 0, 0, 1, .6 + .4 * clamp(t))];
-    case 'Zzz': return [0, 1, 2].map((i) => layer(0, .6 - i * .3, -.1 * i, .3 + i * .05, 1, 15 - i * 15, clamp((t - i * .15) / .15)));
+    case 'Twinkle': return [[0, 0, 1], [.7, -.6, .9], [.8, .6, .6]].map(([x, y, w], i) => anchored(layer(0, x, y * 121 / 134, w, 1 + ([1.2, 1.15, .9][i] - 1) * (.5 - .5 * Math.cos(t / [.5, .6, .4][i] * Math.PI * 2))), .5, .5));
+    case 'Sweat': return [layer(0, 0, clamp(t / .4) * 74 / 114), layer(1, 1, (-.5 + 2.3 * 46 / 74 * clamp(t / .4)) * 74 / 114, 46 / 74)];
+    case 'Surprise': return [anchored(layer(0, 0, -.08 * Math.sin(Math.PI * clamp(t / .3)), 1, .7 + .3 * clamp(t / .3), -10), .5, 1), anchored(layer(1, 1.05, 0, 103 / 60, .7 + .3 * clamp(t / .3), 15), .5, 1)].map((p, i) => ({...p, scaleY: i ? .3 + .7 * clamp(t / .3) : 1}));
+    case 'Sad': return [0, 1, 2].map((i) => ({...layer(0, i * 30 / 88, ([0, 30, -30][i] + 35 * clamp((t - i / 6 - 1 / 15) / (4 / 15))) / 160, 28 / 88, 1, 0, clamp((t - i / 6) * 15)), scaleY: .5 + .5 * clamp((t - i / 6 - 1 / 15) / (4 / 15))}));
+    case 'Steam': return [anchored(layer(0, 0, 0, 1, .1 + .6 * clamp(t / (14 / 60)), -30, 1 - clamp((t - 14 / 60) / (12 / 60))), 1.4, 1.5), anchored(layer(0, 0, 0, 1, .6 + .3 * clamp((t - 14 / 60) / (21 / 60)), 0, t < 14 / 60 ? 0 : 1 - clamp((t - 35 / 60) / (8 / 60))), 1.4, 1.5)];
+    case 'Sigh': return [anchored(layer(0, 0, 0, 1, .3 + .6 * out((t - 2 / 60) / (33 / 60)), 0, clamp(t / (2 / 60)) * (1 - clamp((t - 47 / 60) / (11 / 60)))), 1, -.2)];
+    case 'Tear': return [anchored(layer(0, 0, 30 / 87, 1, .5 + .5 * out((t - 12 / 60) / (13 / 60)), 0, clamp((t - 12 / 60) / (3 / 60)) * (1 - clamp((t - 57 / 60) / (4 / 60)))), 1, 0), anchored(layer(1, 0, 0, 52 / 68, .6 + .4 * out((t - 7 / 60) / (12 / 60)), 0, clamp(t / (7 / 60)) * (1 - clamp((t - 32 / 60) / (15 / 60)))), 1, 0)];
+    case 'Zzz': return [0, 1, 2].map((i) => layer(0, [0, -80, -190][i] / 282, [0, -30, 7][i] / 94, 92 / 282, [.8, .9, 1][i], [15, 5, -15][i], t >= [0, 53 / 60, 101 / 60][i] ? 1 : 0));
     default: throw new Error(`Unsupported bubble: ${name}`);
   }
 }

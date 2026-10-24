@@ -522,7 +522,7 @@ const CharacterFigure: React.FC<{
               opacity,
               transform: cue.name === 'Shy' && !outfit.spineBounds?.bubbleAnchors?.Dot ? 'translate(-100%, -100%)' : undefined,
             }}>
-              {bubbleLayers(cue.name, seconds, outfit.spineBounds?.bubbleAnchors?.[cue.name]).map((layer, i) => images[layer.image] ? <Img key={i} src={staticFile(images[layer.image]!)} style={{position: 'absolute', width: `${layer.width * 100}%`, left: `${layer.x * 100}%`, top: `${layer.y * 100}%`, opacity: layer.opacity, transformOrigin: '0 0', transform: `rotate(${layer.angle}deg) scale(${layer.scale}) translate(${-(layer.anchorX ?? 0) * 100}%, ${-(layer.anchorY ?? 0) * 100}%)`}} /> : null)}
+              {bubbleLayers(cue.name, seconds, outfit.spineBounds?.bubbleAnchors?.[cue.name]).map((layer, i) => images[layer.image] ? <Img key={i} src={staticFile(images[layer.image]!)} style={{position: 'absolute', width: `${layer.width * 100}%`, left: `${layer.x * 100}%`, top: `${layer.y * 100}%`, opacity: layer.opacity, transformOrigin: '0 0', transform: `rotate(${layer.angle}deg) scale(${layer.scale}, ${layer.scale * (layer.scaleY ?? 1)}) translate(${-(layer.anchorX ?? 0) * 100}%, ${-(layer.anchorY ?? 0) * 100}%)`}} /> : null)}
             </div>
           ) : null}
         </React.Fragment>;
