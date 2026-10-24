@@ -15,6 +15,20 @@ test('Shy starts at 0.8, grows, shakes twice and fades without playback state', 
 import {readFileSync} from 'node:fs';
 import {bubbleLayers, bubbleOpacity} from '../templates/bubbles.mjs';
 const presets = JSON.parse(readFileSync(new URL('../templates/bubble-presets.json', import.meta.url)));
+test('Yuuka screenshot anchor matches measured screen coordinates and scales with PNG', () => {
+  const registry = JSON.parse(readFileSync(new URL('../templates/bubble-calibrations.json', import.meta.url)));
+  const anchors = Object.values(registry)[0].anchors;
+  const bounds = {height: 2453, imageWidth: 822, imageHeight: 1920, bubbleAnchors: anchors};
+  const h = 1920 * 1.08174715;
+  const g = bubbleGeometry(presets.Dot, h, bounds, 'Dot');
+  assert.ok(Math.abs(g.x + 1542.61420 - 1647) < .01);
+  assert.ok(Math.abs(g.y + 66.47091 - 260) < .01);
+  assert.ok(Math.abs(g.width - 193.8) < .01);
+  const zoom = bubbleGeometry(presets.Dot, h * 1.5, bounds, 'Dot');
+  for (const key of ['x', 'y', 'width']) assert.ok(Math.abs(zoom[key] - g[key] * 1.5) < 1e-8);
+  const dots = bubbleLayers('Dot', .8, anchors.Dot);
+  assert.ok(Math.abs((dots[2].x - dots[1].x) * g.width - 47) < .1);
+});
 test('all 20 bubbles sample valid image layers and disappear at end', () => {
   assert.equal(Object.keys(presets).length, 20);
   for (const [name, preset] of Object.entries(presets)) {

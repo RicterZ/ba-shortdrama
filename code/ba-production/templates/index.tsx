@@ -43,7 +43,7 @@ type SceneDef = {
 
 type Outfit = {
   name: string;
-  spineBounds?: {x: number; y: number; width: number; height: number; imageWidth: number; imageHeight: number};
+  spineBounds?: {x: number; y: number; width: number; height: number; imageWidth: number; imageHeight: number; bubbleAnchors?: Record<string, {x: number; y: number; width: number; dotX?: number; dotY?: number; dotStep?: number}>};
   sprites: Record<string, string>;
   fallbacks?: string[];
 };
@@ -508,7 +508,7 @@ const CharacterFigure: React.FC<{
         const preset = bubblePresets[cue.name];
         const opacity = bubbleOpacity(seconds, preset.seconds);
         const spriteHeight = height * entry.height;
-        const geometry = bubbleGeometry(preset, spriteHeight, outfit.spineBounds);
+        const geometry = bubbleGeometry(preset, spriteHeight, outfit.spineBounds, cue.name);
         const images = cue.images ?? [cue.balloon, cue.image];
         return <React.Fragment key={index}>
           {cue.sound !== false && cue.audio ? <Sequence from={cue.startFrame}><Audio src={staticFile(cue.audio)} volume={0.5} /></Sequence> : null}
@@ -522,7 +522,7 @@ const CharacterFigure: React.FC<{
               opacity,
               transform: cue.name === 'Shy' ? 'translate(-100%, -100%)' : undefined,
             }}>
-              {bubbleLayers(cue.name, seconds).map((layer, i) => images[layer.image] ? <Img key={i} src={staticFile(images[layer.image]!)} style={{position: 'absolute', width: `${layer.width * 100}%`, left: `${layer.x * 100}%`, top: `${layer.y * 100}%`, opacity: layer.opacity, transform: `rotate(${layer.angle}deg) scale(${layer.scale})`}} /> : null)}
+              {bubbleLayers(cue.name, seconds, outfit.spineBounds?.bubbleAnchors?.[cue.name]).map((layer, i) => images[layer.image] ? <Img key={i} src={staticFile(images[layer.image]!)} style={{position: 'absolute', width: `${layer.width * 100}%`, left: `${layer.x * 100}%`, top: `${layer.y * 100}%`, opacity: layer.opacity, transform: `rotate(${layer.angle}deg) scale(${layer.scale})`}} /> : null)}
             </div>
           ) : null}
         </React.Fragment>;

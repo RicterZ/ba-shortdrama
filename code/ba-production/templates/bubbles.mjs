@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Shy timing adapted from ba-archive emotionPlayer.ts / emotionOptions.ts.
 // Native export bounds locate the skeleton origin inside the uncropped PNG.
-export function bubbleGeometry(preset, spriteHeight, bounds) {
+export function bubbleGeometry(preset, spriteHeight, bounds, name) {
   if (!bounds || !(bounds.height > 0)) throw new Error('Bubble requires matching Spine bounds');
   const scale = spriteHeight / bounds.height;
+  const calibration = bounds.bubbleAnchors?.[name];
+  if (calibration) return {
+    x: calibration.x * spriteHeight * bounds.imageWidth / bounds.imageHeight,
+    y: calibration.y * spriteHeight,
+    width: calibration.width * spriteHeight * bounds.imageWidth / bounds.imageHeight,
+  };
   return {
     x: ((preset.offset.x - .8) * 540 - bounds.x) * scale,
     y: ((preset.offset.y - 1.2) * 1012 + bounds.y + bounds.height) * scale,
@@ -28,7 +34,7 @@ export function sampleShy(seconds) {
 const clamp = (v) => Math.max(0, Math.min(1, v));
 // Layer coordinates are relative to the effect box. Curves approximate the
 // upstream multi-sprite timeline; they are not game-frame-exact recordings.
-export function bubbleLayers(name, t) {
+export function bubbleLayers(name, t, calibration) {
   const layer = (image, x = 0, y = 0, width = 1, scale = 1, angle = 0, opacity = 1) =>
     ({image, x, y, width, scale, angle, opacity});
   const wave = (period) => Math.sin(t / period * Math.PI * 2);
@@ -47,7 +53,7 @@ export function bubbleLayers(name, t) {
     case 'Dot':
       // Source creates three 39px dots over the 255x198 balloon, positions
       // their container at (10%, 35%), then advances each dot by 2 widths.
-      return [layer(0), ...[0, 1, 2].map((i) => layer(1, .1 + i * 2 * 39 / 255, .35, 39 / 255, 1, 0, clamp((t - .3 - i * .4) / .1)))];
+      return [layer(0), ...[0, 1, 2].map((i) => layer(1, (calibration?.dotX ?? .1) + i * (calibration?.dotStep ?? 2 * 39 / 255), calibration?.dotY ?? .35, 39 / 255, 1, 0, clamp((t - .3 - i * .4) / .1)))];
     case 'Bulb':
       return [layer(0, 0, 0, 1, .7 + .3 * clamp(t / .2)), layer(1, .3, .18, .4), layer(2, .25, .08, .5, 1, 0, clamp((t - .2) / .1))];
     case 'Question':

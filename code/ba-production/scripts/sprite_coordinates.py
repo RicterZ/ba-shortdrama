@@ -1,5 +1,6 @@
 """Read Spine 4.2 export bounds for a matching, uncropped standing PNG."""
 import hashlib
+import json
 import math
 import struct
 from pathlib import Path
@@ -18,6 +19,10 @@ def read_coordinates(skeleton: Path, sprite: Path) -> dict:
         iw, ih = image.size
     if abs((iw / ih) / (width / height) - 1) > .02:
         raise ValueError("PNG and Spine bounds differ: use the matching uncropped standing export")
-    return {"x": x, "y": y, "width": width, "height": height,
+    result = {"x": x, "y": y, "width": width, "height": height,
             "imageWidth": iw, "imageHeight": ih,
             "source": skeleton.name, "sha256": hashlib.sha256(raw).hexdigest()}
+    calibrations = json.loads((Path(__file__).resolve().parents[1] / "templates" / "bubble-calibrations.json").read_text())
+    if result["sha256"] in calibrations:
+        result["bubbleAnchors"] = calibrations[result["sha256"]]["anchors"]
+    return result
