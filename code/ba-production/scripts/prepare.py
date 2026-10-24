@@ -79,13 +79,16 @@ def build_timing(
     reuse_audio: bool,
     timeout: int,
     allow_fallback: bool,
+    intro_hold: int = 0,
 ) -> tuple[list[dict], int, dict]:
     audio_dir = episode / "audio"
     raws_audio = episode / "raws" / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
     raws_audio.mkdir(parents=True, exist_ok=True)
 
-    cursor = timing_cfg["intro_frames"] + timing_cfg["lead_in_frames"]
+    # `intro_hold` is 0 when episode.yaml has no intro block, so deleting the
+    # title card also drops the frames that used to sit under it.
+    cursor = intro_hold + timing_cfg["lead_in_frames"]
     timed: list[dict] = []
     providers: dict[str, int] = {}
     for index, line in enumerate(script):
@@ -449,6 +452,11 @@ def main() -> int:
             raise SystemExit(f"台词 {line['id']} 引用了不存在的服装 {outfit!r}")
         line_outfits[line["id"]] = outfit
 
+    try:
+        intro_hold = lib.intro_hold_frames(config, timing_cfg)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
     timed, total_frames, providers = build_timing(
         script,
         characters,
@@ -459,6 +467,7 @@ def main() -> int:
         args.reuse_audio,
         args.voice_timeout,
         args.voice_fallback,
+        intro_hold,
     )
     scenes: dict[tuple[str, str | None], dict] = {}
     shots, total_frames, line_shifts = build_shots(
@@ -578,7 +587,7 @@ def main() -> int:
     intro = None
     if intro_cfg:
         intro = {
-            "durationInFrames": int(intro_cfg.get("durationInFrames", timing_cfg["intro_frames"])),
+            "durationInFrames": intro_hold,
             "kicker": intro_cfg.get("kicker", ""),
             "title": intro_cfg.get("title", config.get("title", "")),
             "subtitle": intro_cfg.get("subtitle", ""),

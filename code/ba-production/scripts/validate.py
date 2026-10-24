@@ -288,8 +288,12 @@ def check_timing(
         if abs(float(line.get("seconds", seconds)) - seconds) > 0.15:
             report.warn(f"台词 {line.get('id')} 记录的时长与音频实测不一致")
 
-    intro_frames = int(timing_cfg["intro_frames"])
-    if config.get("intro") and lines and int(lines[0]["start"]) < intro_frames:
+    try:
+        intro_hold = lib.intro_hold_frames(config, timing_cfg)
+    except ValueError as exc:
+        report.error(str(exc))
+        intro_hold = 0
+    if lines and int(lines[0]["start"]) < intro_hold:
         report.error("第一句台词开始时间早于 intro 结束时间")
 
     if scene:

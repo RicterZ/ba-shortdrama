@@ -1,7 +1,9 @@
 """Timing math for transitions: padding, overlap and shot-relative fields."""
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -184,6 +186,47 @@ class ShotLayoutTest(unittest.TestCase):
         cfg = {"on": "every-cut", "type": "fade", "durationInFrames": 120}
         with self.assertRaises(SystemExit):
             build(2, cfg)
+
+
+class IntroHoldTest(unittest.TestCase):
+    def test_missing_intro_reserves_nothing(self):
+        self.assertEqual(lib.intro_hold_frames({}), 0)
+        self.assertEqual(lib.intro_hold_frames({"timing": TIMING}, TIMING), 0)
+
+    def test_duration_overrides_the_timing_default(self):
+        config = {"intro": {"durationInFrames": 90, "title": "夏日补丁"}}
+        self.assertEqual(lib.intro_hold_frames(config, TIMING), 90)
+
+    def test_omitted_duration_uses_timing_intro_frames(self):
+        self.assertEqual(lib.intro_hold_frames({"intro": {"title": "夏日补丁"}}, TIMING), 60)
+
+    def test_bad_intro_is_rejected(self):
+        with self.assertRaises(ValueError):
+            lib.intro_hold_frames({"intro": {"durationInFrames": -1}}, TIMING)
+        with self.assertRaises(ValueError):
+            lib.intro_hold_frames({"intro": "Episode 1"}, TIMING)
+        with self.assertRaises(ValueError):
+            lib.intro_hold_frames({"intro": {"durationInFrames": True}}, TIMING)
+
+    @patch("prepare.shutil.copy2")
+    @patch("prepare.lib.probe_duration", return_value=1.0)
+    @patch(
+        "prepare.voice.synthesize_line",
+        return_value={"provider": "reused", "voice_id": "", "model": "", "speed": 1.0, "fallback": False},
+    )
+    def test_first_line_starts_after_the_card_only_when_intro_exists(self, _synth, _probe, _copy):
+        script = [{"id": "L1", "speaker": "saiba-momoi", "emotion": "default", "text": "老师"}]
+        characters = {"saiba-momoi": {"default_outfit": "default", "voice": {}}}
+        with tempfile.TemporaryDirectory() as tmp:
+            episode = Path(tmp)
+            without, _, _ = prepare.build_timing(
+                script, characters, {"L1": "default"}, episode, 30, TIMING, False, 30, False, intro_hold=0
+            )
+            with_card, _, _ = prepare.build_timing(
+                script, characters, {"L1": "default"}, episode, 30, TIMING, False, 30, False, intro_hold=40
+            )
+        self.assertEqual(without[0]["start"], TIMING["lead_in_frames"])
+        self.assertEqual(with_card[0]["start"], 40 + TIMING["lead_in_frames"])
 
 
 if __name__ == "__main__":
