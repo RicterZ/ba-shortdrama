@@ -27,6 +27,26 @@ DEFAULT_TIMING = {
     "outro_frames": 24,
 }
 
+
+def intro_hold_frames(config: dict, timing_cfg: dict | None = None) -> int:
+    """Frames reserved for the opening title card before the first line's lead-in.
+
+    No `intro` block means no card and no hold. `timing.intro_frames` is only
+    the default length when `intro` omits `durationInFrames`.
+    """
+    intro = config.get("intro")
+    if not intro:
+        return 0
+    if not isinstance(intro, dict):
+        raise ValueError("episode.yaml 的 intro 必须是对象")
+    timing = {**DEFAULT_TIMING, **(timing_cfg or {})}
+    raw = intro.get("durationInFrames", timing["intro_frames"])
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise ValueError("intro.durationInFrames 必须是非负整数")
+    if raw < 0:
+        raise ValueError("intro.durationInFrames 不能为负")
+    return raw
+
 DEFAULT_SUBTITLE = {
     "max_chars_per_line": 26,
     "max_lines": 2,

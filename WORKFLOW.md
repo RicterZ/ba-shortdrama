@@ -162,7 +162,13 @@ npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-mom
 
 ### 开头标题卡
 
-`episode.yaml` 里的 `intro` 是可选块：`kicker` 是小标签（实机写作 `Episode 1`，带黄色下划线），`title` 是浅蓝切面带上的深蓝大标题，`durationInFrames` 控制长度。不想要标题卡时直接删掉整个 `intro`，视频会从第一个镜头开始；模板里没有强制标题。`style.watermark` 不渲染。设计 token 见 `docs/UI.md`。
+开头的 Episode 展示页由 `episode.yaml` 的 `intro` 控制，不需要改模板代码。
+
+- 要标题卡：写上 `intro`。`kicker` 是小标签（实机写作 `Episode 1`，带黄色下划线），`title` 是浅蓝切面带上的深蓝大标题，`subtitle` 可选。`durationInFrames` 是卡片长度；省略时用 `timing.intro_frames`（默认 60）。卡片结束后再空 `timing.lead_in_frames`，第一句台词才开始。
+- 不要标题卡：删掉整个 `intro`。模板不会画这页，prepare 也不再预留 `timing.intro_frames`，视频从第一个镜头开始，第一句只空 `lead_in_frames`。`timing.intro_frames` 本身不会单独打开标题卡。
+- 改过 `intro` 之后要重新 prepare，时间轴才会跟着变。已经准备好的旧集数保持原样，直到下次 prepare。
+
+`style.watermark` 不渲染。设计 token 见 `docs/UI.md`。
 
 ### 台词打字效果
 
