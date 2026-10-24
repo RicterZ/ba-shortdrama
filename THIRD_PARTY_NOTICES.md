@@ -19,3 +19,12 @@ incorporating this code must meet the applicable AGPL source-distribution and
 network-use obligations; attribution alone is not sufficient. This notice does
 not relicense unrelated third-party software or game assets. Blue Archive game
 images, sounds and other content remain the property of their respective owners.
+
+## Shy bubble
+
+`code/ba-production/templates/bubbles.mjs` and the Shy rendering in
+`templates/index.tsx` adapt `emotionPlayer.ts` and `options/emotionOptions.ts`
+from the same pinned ba-archive revision under AGPL-3.0. Changes: frame-sampled
+scale, two internal rotations, opacity; CSS layout for flat character sprites.
+`fetch_bubbles.py` retrieves artwork from that revision and records provenance
+locally; these game images and Kivo sound effects are not relicensed as AGPL.

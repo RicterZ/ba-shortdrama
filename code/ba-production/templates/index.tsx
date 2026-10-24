@@ -1,5 +1,6 @@
 import React from 'react';
 import {sampleActions} from './character-actions.mjs';
+import {sampleShy} from './bubbles.mjs';
 import {
   AbsoluteFill,
   Audio,
@@ -152,6 +153,7 @@ type Shot = {
     /** Timed expression changes that do not wait for the character's next line. */
     emotionCues?: Array<{ emotion: string; startFrame: number }>;
     actions?: Array<{ name: string; startFrame: number }>;
+    bubbles?: Array<{ name: 'Shy'; startFrame: number; sound?: boolean; balloon?: string; image?: string; audio?: string }>;
     facing?: 'left' | 'right';
     turns?: CharacterTurn[];
     motion?: CharacterMotion | null;
@@ -375,6 +377,7 @@ const CharacterFigure: React.FC<{
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
   const action = sampleActions(entry.actions, frame, fps);
+  const latestBubbleFrame = Math.max(-1, ...(entry.bubbles ?? []).filter((cue) => cue.startFrame <= frame).map((cue) => cue.startFrame));
   if (!data) return null;
 
   const outfit = data.outfits[entry.outfit] || data.outfits[data.default_outfit];
@@ -498,6 +501,18 @@ const CharacterFigure: React.FC<{
             : 'drop-shadow(0 16px 30px rgba(20,30,45,0.22))',
         }}
       />
+      {(entry.bubbles ?? []).map((cue, index) => {
+        const pose = sampleShy((frame - cue.startFrame) / fps);
+        return <React.Fragment key={index}>
+          {cue.sound !== false && cue.audio ? <Sequence from={cue.startFrame}><Audio src={staticFile(cue.audio)} volume={0.5} /></Sequence> : null}
+          {cue.startFrame === latestBubbleFrame && pose.opacity > 0 && cue.balloon && cue.image ? (
+            <div style={{position: 'absolute', left: `${px * 100}%`, bottom: `${(ground + lift + entry.height * poseScale * 0.7) * 100}%`, width: height * entry.height * poseScale * 0.23, opacity: pose.opacity * action.opacity, transformOrigin: 'bottom right', transform: `translateX(35%) scale(${pose.scale})`}}>
+              <Img src={staticFile(cue.balloon)} style={{width: '100%'}} />
+              <Img src={staticFile(cue.image)} style={{position: 'absolute', width: '55%', left: '18%', top: '15%', transform: `rotate(${pose.angle}deg)`}} />
+            </div>
+          ) : null}
+        </React.Fragment>;
+      })}
     </>
   );
 };

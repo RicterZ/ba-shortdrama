@@ -21,6 +21,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lib  # noqa: E402
 import voice  # noqa: E402
 
+def snapshot_bubbles(shots: list[dict], raws: Path) -> None:
+    """Snapshot effect media; fail instead of silently rendering a missing effect."""
+    for shot in shots:
+        for character in shot.get("characters", []):
+            for cue in character.get("bubbles", []):
+                media = {
+                    "balloon": lib.ROOT / "data/effects/ba/Emoticon_Balloon_N.png",
+                    "image": lib.ROOT / "data/effects/ba/Emoticon_Shy.png",
+                }
+                if cue["sound"]:
+                    media["audio"] = lib.ROOT / "data/audio/sfx/SFX_Emoticon_Motion_Shy.wav"
+                for field, src in media.items():
+                    if not src.is_file():
+                        raise SystemExit(f"Missing bubble asset: {src.name}; run fetch_bubbles.py")
+                    relative = Path("effects") / src.name
+                    dst = raws / relative
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dst)
+                    cue[field] = relative.as_posix()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="准备一集的语音、分镜快照和 Remotion scene")
     parser.add_argument("--episode", required=True, help="剧集 id 或目录路径")
@@ -341,6 +362,16 @@ def build_shots(
                 if not (lead <= cue_frame < duration):
                     raise SystemExit(f"Character action {name} starts outside shot {raw['id']}")
                 actions.append({"name": name, "startFrame": cue_frame})
+            bubbles = []
+            for cue in entry.get("bubbles") or []:
+                frame = cue.get("startFrame", 0)
+                if cue.get("name") != "Shy" or isinstance(frame, bool) or not isinstance(frame, int):
+                    raise SystemExit(f"Invalid bubble cue: {cue!r}")
+                if not (0 <= frame < duration - lead):
+                    raise SystemExit(f"Bubble starts outside shot {raw['id']}")
+                if not isinstance(cue.get("sound", True), bool):
+                    raise SystemExit("bubbles.sound must be boolean")
+                bubbles.append({"name": "Shy", "startFrame": frame + lead, "sound": cue.get("sound", True)})
             characters.append(
                 {
                     "id": entry["id"],
@@ -355,6 +386,7 @@ def build_shots(
                     "holdEmotion": bool(entry.get("holdEmotion", False)),
                     "emotionCues": emotion_cues,
                     "actions": actions,
+                    "bubbles": bubbles,
                     "facing": facing,
                     "turns": turns,
                     "motion": motion,
@@ -490,6 +522,7 @@ def main() -> int:
 
     raws = episode / "raws"
     (raws / "images").mkdir(parents=True, exist_ok=True)
+    snapshot_bubbles(shots, raws)
 
     # Blue Archive UI kit sound effects. See data/ui/manifest.json for provenance.
     default_ui = {

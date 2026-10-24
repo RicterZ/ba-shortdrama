@@ -1,6 +1,8 @@
 """Timing math for transitions: padding, overlap and shot-relative fields."""
 import sys
 import unittest
+import tempfile
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -59,6 +61,23 @@ def build(count: int, transitions: dict | None, backgrounds: list[str] | None = 
 
 
 class ParseTransitionTest(unittest.TestCase):
+    def test_bubble_snapshot_copies_media_and_mute_needs_no_audio(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            images = root / "data/effects/ba"
+            images.mkdir(parents=True)
+            for name in ["Emoticon_Balloon_N.png", "Emoticon_Shy.png"]:
+                (images / name).write_bytes(b"test-png")
+            cue = {"name": "Shy", "startFrame": 0, "sound": False}
+            shots = [{"characters": [{"bubbles": [cue]}]}]
+            with patch.object(lib, "ROOT", root):
+                prepare.snapshot_bubbles(shots, root / "raws")
+                self.assertEqual((root / "raws" / cue["image"]).read_bytes(), b"test-png")
+                self.assertNotIn("audio", cue)
+                cue["sound"] = True
+                with self.assertRaises(SystemExit):
+                    prepare.snapshot_bubbles(shots, root / "raws")
+
     def test_defaults_fill_gaps(self):
         parsed = lib.parse_transition({"type": "slide"}, {"durationInFrames": 20})
         self.assertEqual(parsed, {"type": "slide", "durationInFrames": 20})
@@ -170,7 +189,8 @@ class ShotLayoutTest(unittest.TestCase):
         }
         raw[1]["characters"] = [
             {"id": "saiba-momoi", "motion": {"startFrame": 0, "endFrame": 60},
-             "actions": [{"name": "falldownL", "startFrame": 20}]}
+             "actions": [{"name": "falldownL", "startFrame": 20}],
+             "bubbles": [{"name": "Shy", "startFrame": 30, "sound": False}]}
         ]
         shots, _, _ = prepare.build_shots(
             raw, timed, TIMING, {}, {"saiba-momoi": "default"}, cfg
@@ -181,6 +201,19 @@ class ShotLayoutTest(unittest.TestCase):
         self.assertEqual(shots[1]["choices"]["hideFrame"], 60)
         self.assertEqual(shots[1]["characters"][0]["motion"], {"startFrame": 10, "endFrame": 70})
         self.assertEqual(shots[1]["characters"][0]["actions"], [{"name": "falldownL", "startFrame": 30}])
+        self.assertEqual(shots[1]["characters"][0]["bubbles"], [{"name": "Shy", "startFrame": 40, "sound": False}])
+
+    def test_invalid_bubbles_are_rejected(self):
+        for cue in [
+            {"name": "Think", "startFrame": 0},
+            {"name": "Shy", "startFrame": -1},
+            {"name": "Shy", "startFrame": True},
+            {"name": "Shy", "startFrame": 0, "sound": "false"},
+        ]:
+            with self.subTest(cue=cue), self.assertRaises(SystemExit):
+                raw = board(1)
+                raw[0]["characters"] = [{"id": "saiba-momoi", "bubbles": [cue]}]
+                prepare.build_shots(raw, [line("L1", 0)], TIMING, {}, {"saiba-momoi": "default"})
 
     def test_invalid_actions_are_rejected(self):
         for cue in [

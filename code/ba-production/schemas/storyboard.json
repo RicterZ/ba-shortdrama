@@ -313,6 +313,31 @@
                       }
                     }
                   }
+                },
+                "bubbles": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "startFrame"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "enum": [
+                          "Shy"
+                        ]
+                      },
+                      "startFrame": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "sound": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
                 }
               }
             }
