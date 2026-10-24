@@ -14,6 +14,9 @@ SCENES = ROOT / "data" / "scenes"
 SCHEMAS = ROOT / "code" / "ba-production" / "schemas"
 LOCAL_ENV = ROOT / "local" / ".env"
 
+DEFAULT_CHARACTER_HEIGHT = 1.08
+DEFAULT_CHARACTER_BOTTOM = -0.25
+
 DEFAULT_TIMING = {
     "intro_frames": 60,
     "lead_in_frames": 18,

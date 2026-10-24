@@ -177,7 +177,7 @@ def check_script_and_board(
                 report.error(f"镜头 {sid} 的角色 {cid} 引用了不存在的服装 {outfit!r}")
             if not 0.0 <= float(entry.get("x", 0.5)) <= 1.0:
                 report.error(f"镜头 {sid} 角色 {cid} 的 x 必须在 0 到 1 之间")
-            if not 0.0 <= float(entry.get("height", 0.92)) <= 1.5:
+            if not 0.0 <= float(entry.get("height", lib.DEFAULT_CHARACTER_HEIGHT)) <= 1.5:
                 report.error(f"镜头 {sid} 角色 {cid} 的 height 超出合理范围")
 
         scene_ref = shot.get("scene")
