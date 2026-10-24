@@ -7,7 +7,8 @@ export function bubbleGeometry(preset, spriteHeight, bounds) {
   return {
     x: ((preset.offset.x - .8) * 540 - bounds.x) * scale,
     y: ((preset.offset.y - 1.2) * 1012 + bounds.y + bounds.height) * scale,
-    width: preset.width * 540 * scale,
+    // Dot never calls getRelativeScale: its balloon and children stay native.
+    width: (preset.nativeWidth ?? preset.width * 540) * scale,
   };
 }
 
@@ -46,7 +47,7 @@ export function bubbleLayers(name, t) {
     case 'Dot':
       // Source creates three 39px dots over the 255x198 balloon, positions
       // their container at (10%, 35%), then advances each dot by 2 widths.
-      return [layer(0), ...[0, 1, 2].map((i) => layer(1, .1 + i * 2 * 39 / 255, .35, 39 / (255 * .16), 1, 0, clamp((t - .3 - i * .4) / .1)))];
+      return [layer(0), ...[0, 1, 2].map((i) => layer(1, .1 + i * 2 * 39 / 255, .35, 39 / 255, 1, 0, clamp((t - .3 - i * .4) / .1)))];
     case 'Bulb':
       return [layer(0, 0, 0, 1, .7 + .3 * clamp(t / .2)), layer(1, .3, .18, .4), layer(2, .25, .08, .5, 1, 0, clamp((t - .2) / .1))];
     case 'Question':

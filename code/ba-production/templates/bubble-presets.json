@@ -67,7 +67,8 @@
       "Emoticon_Idea.png"
     ],
     "seconds": 1.4,
-    "width": 0.16,
+    "width": 0.3,
+    "nativeWidth": 255,
     "offset": {
       "x": 0.0,
       "y": -0.1
