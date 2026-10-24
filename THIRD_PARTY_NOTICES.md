@@ -38,3 +38,11 @@ frame curves, rather than copying the Pixi/GSAP runtime. Think has no handler in
 that upstream revision: its thought-balloon entrance/hold is independently
 implemented here using `Emoticon_Balloon_T.png`, not the Dot effect. Game-exact
 Think content and timing have not been established.
+
+Bubble placement now also uses the pinned `prepareEmotionContainer` equations
+`(offset.x - 0.8) * 540` and `(offset.y - 1.2) * 1012`, and
+`getRelativeScale`: base texture width is `options.scale * 540` reference units.
+The flat-PNG adapter maps this centered reference plane to the displayed sprite
+height (2024 reference units); it does not use an arbitrary viewport offset.
+The per-preset offsets and scale values are taken from `emotionOptions.ts`.
+Think still has no upstream parameters and retains explicitly custom settings.

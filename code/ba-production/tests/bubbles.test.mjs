@@ -34,3 +34,20 @@ test('all 20 bubbles sample valid image layers and disappear at end', () => {
   assert.deepEqual(presets.Think.images, ['Emoticon_Balloon_T.png']);
   assert.notDeepEqual(presets.Think.images, presets.Dot.images);
 });
+
+import {bubbleGeometry} from '../templates/bubbles.mjs';
+test('geometry uses upstream fixed offsets and texture width, scales uniformly', () => {
+  for (const preset of Object.values(presets)) {
+    const g = bubbleGeometry(preset, 2024);
+    assert.equal(g.x, (preset.offset.x - .8) * 540);
+    assert.equal(g.y, (preset.offset.y - 1.2) * 1012);
+    assert.equal(g.width, preset.width * 540);
+    const half = bubbleGeometry(preset, 1012);
+    assert.equal(half.x, g.x / 2);
+    assert.equal(half.y, g.y / 2);
+    assert.equal(half.width, g.width / 2);
+  }
+  assert.equal(presets.Shy.width, .46);
+  assert.deepEqual(presets.Shy.offset, {x: .5, y: .06});
+  assert.equal(presets.Twinkle.width, .08);
+});

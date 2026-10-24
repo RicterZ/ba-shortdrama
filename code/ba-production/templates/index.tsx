@@ -1,6 +1,6 @@
 import React from 'react';
 import {sampleActions} from './character-actions.mjs';
-import {bubbleLayers, bubbleOpacity} from './bubbles.mjs';
+import {bubbleLayers, bubbleOpacity, bubbleGeometry} from './bubbles.mjs';
 import bubblePresets from './bubble-presets.json';
 import {
   AbsoluteFill,
@@ -507,11 +507,21 @@ const CharacterFigure: React.FC<{
         const seconds = (frame - cue.startFrame) / fps;
         const preset = bubblePresets[cue.name];
         const opacity = bubbleOpacity(seconds, preset.seconds);
+        const spriteHeight = height * entry.height * poseScale * action.scale;
+        const geometry = bubbleGeometry(preset, spriteHeight);
         const images = cue.images ?? [cue.balloon, cue.image];
         return <React.Fragment key={index}>
           {cue.sound !== false && cue.audio ? <Sequence from={cue.startFrame}><Audio src={staticFile(cue.audio)} volume={0.5} /></Sequence> : null}
           {cue === latestBubble && opacity > 0 ? (
-            <div style={{position: 'absolute', left: `calc(${px * 100}% + ${height * entry.height * poseScale * .18 + tx}px)`, bottom: `${(ground + lift + entry.height * poseScale * .72) * 100}%`, width: height * entry.height * poseScale * preset.width * .5, aspectRatio: '1', opacity: opacity * action.opacity}}>
+            <div style={{
+              position: 'absolute',
+              left: `calc(${px * 100}% + ${tx + geometry.x}px)`,
+              top: height * (1 - ground - lift) - spriteHeight / 2 + geometry.y,
+              width: geometry.width,
+              aspectRatio: '1',
+              opacity: opacity * action.opacity,
+              transform: cue.name === 'Shy' ? 'translate(-100%, -100%)' : undefined,
+            }}>
               {bubbleLayers(cue.name, seconds).map((layer, i) => images[layer.image] ? <Img key={i} src={staticFile(images[layer.image]!)} style={{position: 'absolute', width: `${layer.width * 100}%`, left: `${layer.x * 100}%`, top: `${layer.y * 100}%`, opacity: layer.opacity, transform: `rotate(${layer.angle}deg) scale(${layer.scale})`}} /> : null)}
             </div>
           ) : null}
