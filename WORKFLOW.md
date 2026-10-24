@@ -199,8 +199,10 @@ npm run voice -- sample --character saiba-momoi --text "老师，早上好。"
 
 # 单气泡或单动作预览，不经过某一集。默认出一段短视频到 local/work/fx-preview/
 # 气泡要这套衣服已经写了 spine。--still 只出中间一帧。
+# --scene 换成真实房间；--episode 和 --shot 再沿用那一镜的站位。
 npm run fx -- preview Heart --character saiba-momoi
-npm run fx -- preview hophop --character saiba-momoi --still
+npm run fx -- preview Heart --character saiba-momoi --episode 003-game-dev-sneak --shot S2 --still
+npm run fx -- preview hophop --character saiba-momoi --scene game-dev-room --still
 
 # 为一集生成全部语音（--only L7,L12 只补指定台词；--reuse 跳过已有文件）
 npm run voice -- episode --episode 003-game-dev-sneak --only L7 --timeout 180
@@ -309,12 +311,13 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
   "bubbles": [
     {"name": "Think", "startFrame": 15},
     {"name": "Heart", "atLine": "L3", "offsetFrames": 6},
+    {"name": "Heart", "afterLine": "L3", "offsetFrames": 6},
     {"name": "Shy", "startFrame": 75, "sound": false}
   ]
 }
 ```
 
-`name` 必须是下表大小写一致的预设名。时间用 `startFrame` 或 `atLine` 二选一。`startFrame` 是镜头内容起点后的非负整数帧，prepare 自动补偿转场，不要重复加转场时长。`atLine` 写本镜头里的一句台词 id，对齐这句的内容起点；`offsetFrames` 是相对这句起点的帧数，和 `startFrame` 同一套时间，可以为负。台词结束后 6 帧出现时，把 `offsetFrames` 写成这句的帧数再加 6，不用自己减 `shot.from`。`sound` 为布尔值，省略时默认 `true`，`false` 只关闭该气泡音效。音频播放自身长度（镜头结束仍会截断，应留足镜头时间）。不要填写 `x/y/scale/duration`；位置、大小和时长仍由预设决定，不能按镜头改。
+`name` 必须是下表大小写一致的预设名。时间用 `startFrame`、`atLine`、`afterLine` 三选一。`startFrame` 是镜头内容起点后的非负整数帧，prepare 自动补偿转场，不要重复加转场时长。`atLine` 写本镜头里的一句台词 id，对齐这句的内容起点；`afterLine` 对齐这句的结束。`offsetFrames` 是相对这个锚点的帧数，可以为负。台词结束后 6 帧出现，写 `afterLine` 加 `"offsetFrames": 6`，不用查这句有多少帧，也不用自己减 `shot.from`。`sound` 为布尔值，省略时默认 `true`，`false` 只关闭该气泡音效。音频播放自身长度（镜头结束仍会截断，应留足镜头时间）。不要填写 `x/y/scale/duration`；位置、大小和时长仍由预设决定，不能按镜头改。
 
 | 气泡预设 | LLM 选择场景 |
 |---|---|

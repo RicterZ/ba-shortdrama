@@ -236,6 +236,28 @@ class ShotLayoutTest(unittest.TestCase):
         expected = line_item["from"] + line_item["durationInFrames"] - shots[1]["from"] + 6
         self.assertEqual(shots[1]["characters"][0]["bubbles"][0]["startFrame"], expected)
 
+    def test_bubble_after_line_starts_when_the_line_ends(self):
+        raw = board(1)
+        raw[0]["characters"] = [{
+            "id": "saiba-momoi",
+            "bubbles": [{"name": "Heart", "afterLine": "L1", "offsetFrames": 6}],
+        }]
+        shots, _, _ = prepare.build_shots(raw, [line("L1", 0, frames=58)], TIMING, {}, {"saiba-momoi": "default"})
+        self.assertEqual(shots[0]["characters"][0]["bubbles"][0]["startFrame"], 64)
+
+    def test_bubble_after_line_includes_transition_lead(self):
+        cfg = {"on": "every-cut", "type": "fade", "durationInFrames": 10}
+        timed = [line("L1", 0), line("L2", 100, frames=58)]
+        raw = board(2)
+        raw[1]["characters"] = [{
+            "id": "saiba-momoi",
+            "bubbles": [{"name": "Heart", "afterLine": "L2", "offsetFrames": 6}],
+        }]
+        shots, _, _ = prepare.build_shots(raw, timed, TIMING, {}, {"saiba-momoi": "default"}, cfg)
+        line_item = shots[1]["lines"][0]
+        expected = line_item["from"] + line_item["durationInFrames"] - shots[1]["from"] + 6
+        self.assertEqual(shots[1]["characters"][0]["bubbles"][0]["startFrame"], expected)
+
     def test_bubble_at_line_rejects_unknown_line_and_manual_mix(self):
         raw = board(1)
         raw[0]["characters"] = [{"id": "saiba-momoi", "bubbles": [{"name": "Heart", "atLine": "missing"}]}]
@@ -250,6 +272,12 @@ class ShotLayoutTest(unittest.TestCase):
         raw[0]["characters"] = [{
             "id": "saiba-momoi",
             "bubbles": [{"name": "Heart", "startFrame": 4, "offsetFrames": 2}],
+        }]
+        with self.assertRaises(SystemExit):
+            prepare.build_shots(raw, [line("L1", 0)], TIMING, {}, {"saiba-momoi": "default"})
+        raw[0]["characters"] = [{
+            "id": "saiba-momoi",
+            "bubbles": [{"name": "Heart", "atLine": "L1", "afterLine": "L1"}],
         }]
         with self.assertRaises(SystemExit):
             prepare.build_shots(raw, [line("L1", 0)], TIMING, {}, {"saiba-momoi": "default"})

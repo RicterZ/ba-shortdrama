@@ -331,6 +331,11 @@
                         "required": [
                           "atLine"
                         ]
+                      },
+                      {
+                        "required": [
+                          "afterLine"
+                        ]
                       }
                     ],
                     "additionalProperties": false,
@@ -364,6 +369,10 @@
                         "minimum": 0
                       },
                       "atLine": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "afterLine": {
                         "type": "string",
                         "minLength": 1
                       },

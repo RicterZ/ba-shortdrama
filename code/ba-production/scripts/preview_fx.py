@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Preview one bubble or one character action without an episode.
 
-The clip is a single character on a flat background. Bubble placement, scale,
-and duration stay on the preset; this command does not accept x/y/scale/duration.
+The clip is one character. Pass ``--scene`` for a real room, or ``--episode``
+and ``--shot`` to reuse that shot's room and the character's standing position.
+Bubble placement, scale, and duration stay on the preset.
 
 Examples:
     npm run fx -- preview Heart --character saiba-momoi
-    npm run fx -- preview hophop --character saiba-momoi --still
+    npm run fx -- preview Heart --character saiba-momoi --episode 003-game-dev-sneak --shot S2 --still
+    npm run fx -- preview hophop --character saiba-momoi --scene game-dev-room --still
 """
 from __future__ import annotations
 
@@ -73,6 +75,63 @@ def choose_frame(duration: int, requested: int | None) -> int:
     return frame
 
 
+def stage_scene(scene_id: str, variant: str | None, raws: Path) -> dict:
+    """Copy a scene profile's background into the preview and return the renderer block."""
+    try:
+        loaded = lib.read_scene(scene_id, variant)
+    except FileNotFoundError as exc:
+        raise SystemExit(str(exc)) from exc
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    source = loaded.get("image_source") or ""
+    if not source or not Path(source).is_file():
+        raise SystemExit(f"场景 {scene_id} 没有背景图：{loaded.get('image_ref') or source}")
+    src = Path(source)
+    dst = raws / "images" / f"scene-{loaded['id']}-{loaded['variant']}{src.suffix}"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+    return {
+        "id": loaded["id"],
+        "name": loaded["name"],
+        "renderer": loaded["renderer"],
+        "variant": loaded["variant"],
+        "lighting": loaded["lighting"],
+        "palette": loaded["palette"],
+        "image": f"images/{dst.name}",
+    }
+
+
+def placement_from_shot(episode: str, shot_id: str, character_id: str) -> dict:
+    """Room and standing position already authored for this character in one shot."""
+    episode_dir = lib.resolve_episode(episode)
+    board = lib.load_json(episode_dir / "storyboard.json")
+    shot = next((item for item in board.get("shots") or [] if item.get("id") == shot_id), None)
+    if shot is None:
+        raise SystemExit(f"{episode_dir.name} 没有镜头 {shot_id}")
+    entry = next((item for item in shot.get("characters") or [] if item.get("id") == character_id), None)
+    if entry is None:
+        raise SystemExit(f"镜头 {shot_id} 里没有角色 {character_id}")
+    scene = shot.get("scene")
+    scene_id = None
+    variant = None
+    if isinstance(scene, str):
+        scene_id = scene
+    elif isinstance(scene, dict):
+        scene_id = scene.get("id")
+        variant = scene.get("variant")
+    return {
+        "scene_id": scene_id,
+        "variant": variant,
+        "outfit": entry.get("outfit"),
+        "emotion": entry.get("emotion"),
+        "x": entry.get("x", 0.5),
+        "bottom": entry.get("bottom", lib.DEFAULT_CHARACTER_BOTTOM),
+        "height": entry.get("height", lib.DEFAULT_CHARACTER_HEIGHT),
+        "scale": entry.get("scale", 1.0),
+        "facing": entry.get("facing", "right"),
+    }
+
+
 def build_preview(
     character_id: str,
     name: str,
@@ -81,6 +140,13 @@ def build_preview(
     outfit_id: str | None = None,
     emotion: str = "default",
     mute: bool = False,
+    scene_id: str | None = None,
+    variant: str | None = None,
+    x: float = 0.5,
+    bottom: float | None = None,
+    height: float | None = None,
+    scale: float = 1.0,
+    facing: str = "right",
 ) -> dict:
     kind = classify(name)
     char = lib.read_character(character_id)
@@ -100,6 +166,13 @@ def build_preview(
     if emotion != "default":
         sprites[emotion] = emotion_sprite
 
+    if facing not in ("left", "right"):
+        raise SystemExit(f"facing 必须是 left/right，收到 {facing!r}")
+    if bottom is None:
+        bottom = lib.DEFAULT_CHARACTER_BOTTOM
+    if height is None:
+        height = lib.DEFAULT_CHARACTER_HEIGHT
+    stage = stage_scene(scene_id, variant, raws) if scene_id else None
     seconds = cue_seconds(kind, name)
     duration = frames_for(seconds)
     actions: list[dict] = []
@@ -156,22 +229,23 @@ def build_preview(
                 "from": 0,
                 "durationInFrames": duration,
                 "camera": "static",
+                "scene": stage,
                 "background": {"type": "gradient", "value": "linear-gradient(125deg,#e4f7f5,#fbe6ed)"},
                 "lines": [],
                 "characters": [
                     {
                         "id": character_id,
                         "outfit": outfit_id,
-                        "x": 0.5,
-                        "bottom": lib.DEFAULT_CHARACTER_BOTTOM,
-                        "height": lib.DEFAULT_CHARACTER_HEIGHT,
-                        "scale": 1.0,
+                        "x": x,
+                        "bottom": bottom,
+                        "height": height,
+                        "scale": scale,
                         "entrance": "none",
                         "exit": "none",
                         "emotion": emotion,
                         "actions": actions,
                         "bubbles": bubbles,
-                        "facing": "right",
+                        "facing": facing,
                     }
                 ],
             }
@@ -232,7 +306,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     preview.add_argument("name", help="气泡预设名或动作名，例如 Heart、hophop")
     preview.add_argument("--character", required=True)
     preview.add_argument("--outfit", default="", help="默认用 profile 的 default_outfit")
-    preview.add_argument("--emotion", default="default")
+    preview.add_argument("--emotion", default="", help="默认用镜头里的表情，否则 default")
+    preview.add_argument("--scene", default="", help="场景 id，例如 game-dev-room")
+    preview.add_argument("--variant", default="", help="场景变体，默认用场景自己的 default_variant")
+    preview.add_argument("--episode", default="", help="从这一集的分镜取房间和站位")
+    preview.add_argument("--shot", default="", help="配合 --episode 的镜头 id")
+    preview.add_argument("--x", type=float, default=None)
+    preview.add_argument("--bottom", type=float, default=None)
+    preview.add_argument("--height", type=float, default=None)
+    preview.add_argument("--scale", type=float, default=None)
+    preview.add_argument("--facing", default="", choices=["", "left", "right"])
     preview.add_argument("--still", action="store_true", help="只出中间一帧 PNG")
     preview.add_argument("--frame", type=int, default=None, help="配合 --still 指定帧")
     preview.add_argument("--mute", action="store_true", help="气泡不播放音效")
@@ -242,15 +325,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    placed: dict = {}
+    if args.episode or args.shot:
+        if not args.episode or not args.shot:
+            raise SystemExit("沿用某一镜的房间和站位时，--episode 和 --shot 要一起写")
+        placed = placement_from_shot(args.episode, args.shot, args.character)
     work = lib.ROOT / "local" / "work" / "fx-preview" / f"{args.character}-{args.name}"
     raws = work / "raws"
     scene = build_preview(
         args.character,
         args.name,
         raws,
-        outfit_id=args.outfit or None,
-        emotion=args.emotion,
+        outfit_id=args.outfit or placed.get("outfit") or None,
+        emotion=args.emotion or placed.get("emotion") or "default",
         mute=args.mute,
+        scene_id=args.scene or placed.get("scene_id"),
+        variant=args.variant or placed.get("variant"),
+        x=args.x if args.x is not None else placed.get("x", 0.5),
+        bottom=args.bottom if args.bottom is not None else placed.get("bottom"),
+        height=args.height if args.height is not None else placed.get("height"),
+        scale=args.scale if args.scale is not None else placed.get("scale", 1.0),
+        facing=args.facing or placed.get("facing") or "right",
     )
     suffix = "png" if args.still else "mp4"
     output = Path(args.out) if args.out else work.parent / f"{args.character}-{args.name}.{suffix}"
