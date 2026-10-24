@@ -285,7 +285,22 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 同一角色同时只取开始时间最新的动作；下一动作替换前一个（包括恢复隐藏状态和取消拉近），不是队列，也不叠加多个预设。晕倒结束前留足镜头时长；方向是画面方向，不随角色朝向镜像。
 这些曲线参考社区播放器，并非官方逐帧认证。来源及许可见 `THIRD_PARTY_NOTICES.md`。
 
-气泡字段：先运行 `uv run python code/ba-production/scripts/fetch_bubbles.py` 获取固定版本图片及对应音效，不覆盖已有资源。角色使用 `"bubbles":[{"name":"Shy","startFrame":30,"sound":true}]`。`startFrame` 为镜头内容起点后的帧数，prepare 自动补偿转场。`sound:false` 关闭音效；音频播放自身长度（镜头结束仍会截断，应留足镜头时间）。
+### 气泡与配套音效
+
+先运行 `uv run python code/ba-production/scripts/fetch_bubbles.py` 获取固定版本图片及对应音效，不覆盖已有资源。图片及来源清单位于 `data/effects/ba/`，音效登记在 `data/audio/manifest.json`；代码来源和许可见 `THIRD_PARTY_NOTICES.md`，游戏素材的权利不因项目开源而转移。
+
+在 storyboard 的角色条目中加入 `bubbles`，与 `emotion`（换脸）及 `actions`（立绘动作）分别控制。例如：
+
+```json
+{
+  "bubbles": [
+    {"name": "Think", "startFrame": 15},
+    {"name": "Shy", "startFrame": 75, "sound": false}
+  ]
+}
+```
+
+`name` 必须是下表大小写一致的预设名；`startFrame` 是镜头内容起点后的非负整数帧，prepare 自动补偿转场，不要重复加转场时长。`sound` 为布尔值，省略时默认 `true`，`false` 只关闭该气泡音效。音频播放自身长度（镜头结束仍会截断，应留足镜头时间）。不要填写未支持的 `x/y/scale/duration` 字段；当前 cue 不提供手动位置、大小或时长覆盖。
 
 | 气泡预设 | LLM 选择场景 |
 |---|---|
@@ -299,14 +314,14 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 | `Sweat` / `Sad` / `Tear` | 汗滴 / 低落竖线 / 泪水 |
 | `Steam` / `Sigh` / `Zzz` | 冒气 / 叹气 / 睡觉 |
 
-气泡约 0.5–1.4 秒，具体时长见 `templates/bubble-presets.json`。同一角色后触发气泡替换前一个视觉效果，音效可重叠。气泡作为人物容器的子元素，继承站位、跳跃、进场位移、缩放、旋转、转向及隐藏。
+气泡约 0.5–1.4 秒，具体时长见 `code/ba-production/templates/bubble-presets.json`。同一角色后触发气泡替换前一个视觉效果，音效可重叠。气泡作为人物容器的子元素，继承站位、跳跃、进场位移、缩放、旋转、转向及隐藏。
 
 19 种曲线依据社区播放器转换为分层按帧演出，属于近似复现，不宣称官方逐帧一致。`Think` 上游缺处理函数，采用真实 `Emoticon_Balloon_T` 图和专用音效，入场/停留曲线为本项目自实现；仍需人工比对官方节奏。不得用 Dot、emoji 或换脸代替 Think/Shy。
 
 气泡位置／大小使用固定参考坐标，而非按画面高度随意放置：参考半宽 540、半高 1012；
 每种预设的 `offset` / `width` 从上游 `emotionOptions.ts` 读取。
 气泡的参考位置为 `((offset.x-0.8)*540, (offset.y-1.2)*1012)`，
-参考图宽为 `width*540`。PNG 原点不再假定为图片中心：角色 profile 的每套服装通过
+通常参考图宽为 `width*540`；`Dot` 的上游处理函数没有调用缩放函数，未校准时使用原生 255×198 气泡及 39×39 圆点，不能套用其他预设的宽度换算。PNG 原点不再假定为图片中心：角色 profile 的每套服装通过
 `"spine":"kivo/spine/momoi_spr_HD/momoi_spr.skel"` 指向对应站立模型。prepare 读取 Spine 4.2.33
 导出的真实 `x/y/width/height` 和 PNG 尺寸，保存 `spineBounds`；局部原点为
 `(-x, y+height)`（转换到向下为正的 PNG 坐标）。模型和 PNG 必须是同一套未裁切站立导出，
@@ -315,3 +330,12 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 缺少对应模型时明确报错，不再用 `2024` 或图片中心猜位置。旧 scene 快照含气泡时需重新 prepare。
 `Shy` 还保留右下锚点。大幅拉近或立绘本身出画时，气泡也可能出画；不要为了塞进画面另改气泡比例。
 `Think` 没有上游参数，仍为自实现设置，不将其标成已验证的官方固定参数。
+
+
+#### 实机校准与验收边界
+
+`code/ba-production/templates/bubble-calibrations.json` 按 Spine 文件 SHA-256 登记实机校准，仅覆盖匹配模型和指定气泡；prepare 自动把命中的数据写入 scene 的 `spineBounds.bubbleAnchors`。`x` 为相对未裁切 PNG 宽度的位置、`y` 为相对 PNG 高度的位置、`width` 为相对 PNG 宽度的气泡宽度。它们属于人物局部坐标，随人物一起变换；Dot 还可记录内部圆点的相对位置和间距。不要复制一个角色的数值到其他角色或其他服装。
+
+目前只有优香标准立绘的 `Dot` 根据用户实机截图完成了位置、尺寸和两颗圆点间距校准；第三颗圆点按同间距外推，时间曲线仍参考社区实现。其他角色及其他气泡只有社区参数近似复现，不能标记为已全部实机对齐。新增校准后要重新 prepare，旧 scene 快照不会自动更新。
+
+审片顺序：先在 HTML/Remotion 静态截图确认同角色、同服装、同画幅下的立绘摆放，再检查气泡轮廓、尾巴指向、圆点大小及间距；检查人物移动、1.5 倍缩放和转向时的绑定，最后生成含音效的视频。每个预设应留足入场、完整演出和淡出时间，标签不得遮挡气泡。测试通过不等于实机视觉验收；未经用户确认不合并 main，仍有未校准项时不要宣称全部完成。
