@@ -168,6 +168,27 @@ test('icons inside balloons keep the upstream center instead of a corner offset'
   assert.equal(presets.Bulb.nativeWidth, 255);
 });
 
+test('standalone symbols use the upstream pivot, anchor and native box', () => {
+  const chat = bubbleLayers('Chat', .25)[0];
+  assert.equal(chat.anchorX, .2 * 540 * 1.3 / 147);
+  assert.equal(chat.anchorY, .2 * 540 / 147);
+  assert.deepEqual([bubbleLayers('Question', 0)[0].anchorX, bubbleLayers('Question', 0)[0].anchorY], [.5, 1]);
+  assert.equal(bubbleLayers('Exclaim', 0)[0].anchorX, undefined);
+  assert.equal(presets.Sad.nativeWidth, 88);
+  assert.equal(bubbleLayers('Sad', 0)[1].x, 30 / 88);
+  assert.equal(bubbleLayers('Sad', 0)[0].width, 28 / 88);
+  assert.equal(presets.Sigh.nativeWidth, 141);
+  const surprise = bubbleLayers('Surprise', 0);
+  assert.equal(surprise[0].angle, 0);
+  assert.equal(surprise[1].x, 1.5 * .7);
+  assert.equal(surprise[1].angle, 0);
+  const music = bubbleLayers('Music', .5)[0];
+  assert.ok(Math.abs(music.x + .35) < 1e-12);
+  const angry = bubbleLayers('Angry', .2)[0];
+  assert.equal(angry.scale, .9);
+  assert.ok(Math.abs(angry.scale * angry.scaleY - 1) < 1e-12);
+});
+
 test('Dot keeps the official balloon-to-character size ratio and native dot spacing', () => {
   assert.equal(presets.Dot.nativeWidth, 255);
   assert.equal(presets.Dot.aspectRatio, 255 / 198);

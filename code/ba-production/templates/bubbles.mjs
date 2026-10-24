@@ -65,20 +65,31 @@ export function bubbleLayers(name, t, calibration) {
       return [layer(0), ...[0, 1, 2].map((i) => layer(1, (calibration?.dotX ?? .1) + i * (calibration?.dotStep ?? 2 * 39 / 255), calibration?.dotY ?? .35, 39 / 255, 1, 0, clamp((t - .3 - i * .4) / .1)))];
     case 'Bulb':
       return [layer(0), anchored(layer(1, .5, 100 / 198, 83 / 255), .5, .5), anchored(layer(2, .5, 82 / 198, 130 / 255, 1.13, 0, clamp((t - .2) / .1)), .5, .5)];
+    case 'Exclaim':
+      return [layer(0, 0, 0, 1, t < .2 ? 1 + .4 * clamp(t / .2) : 1.4 - .2 * clamp((t - .2) / .1))];
     case 'Question':
-    case 'Exclaim': {
-      const peak = name === 'Question' ? 1.6 : 1.4;
-      return [layer(0, 0, 0, 1, t < .2 ? 1 + (peak - 1) * clamp(t / .2) : peak - .2 * clamp((t - .2) / .1))];
+      // Pop is anchored at the bottom center, so the mark grows upward.
+      return [anchored(layer(0, 0, 0, 1, t < .2 ? 1 + .6 * clamp(t / .2) : 1.6 - .2 * clamp((t - .2) / .1)), .5, 1)];
+    case 'Chat':
+      // Pivot is assigned after scaling, so it is 1.3 of the displayed width.
+      return [anchored(layer(0, 0, 0, 1, 1, -25 * Math.sin(Math.PI * clamp(t / .5))), .2 * 540 * 1.3 / 147, .2 * 540 / 147)];
+    case 'Angry': return [0, 1, 2].map((i) => {
+      const sx = t < .2 ? 1 - .1 * t / .2 : t < .4 ? .9 + .1 * (t - .2) / .2 : 1 - .8 * clamp((t - .4) / .1);
+      const sy = t < .4 ? 1 : sx;
+      return {...anchored(layer(0, 0, 0, 1, sx, i * 120), .35, -.05), scaleY: sy / sx};
+    });
+    case 'Music': {
+      // x is captured from the note width at the 0.7 start scale, so the travel is 0.7 of the full box.
+      const travel = clamp((t - .1) / .8);
+      return [layer(0, -.7 * travel, .07 * 137 / 131 * wave(.5), 1, .7 + .3 * clamp(t / .1), -8 * wave(.5))];
     }
-    case 'Chat': return [layer(0, 0, 0, 1, 1, -25 * Math.sin(Math.PI * clamp(t / .5)))];
-    case 'Angry': return [0, 1, 2].map((i) => layer(0, 0, 0, 1, t < .4 ? 1 - .1 * Math.sin(Math.PI * t / .4) : 1 - .8 * clamp((t - .4) / .1), i * 120)).map((pose) => ({...pose, anchorX: .35, anchorY: -.05}));
-    case 'Music': return [layer(0, -clamp(t / .9), .1 * wave(.5), 1, .7 + .3 * clamp(t / .1), -8 * wave(.5))];
     case 'Respond': return [-10, 23, 50].map((angle, i) => ({...layer(0, 0, 0, i === 1 ? 2 : 1.4, 1, angle, .2 + .8 * Math.abs(wave(.6))), anchorX: i === 1 ? 1.5 : 1.8, anchorY: 0}));
     // Upstream does getRelativeScale(sprite, options) / 0.5, so the first star's
     // rest width is 0.08*540/0.5. The other two are 0.9 and 0.6 of that width.
     case 'Twinkle': return [[0, 0, 1], [.7, -.6, .9], [.8, .6, .6]].map(([x, y, w], i) => anchored(layer(0, x, y * 121 / 134, w, 1 + ([1.2, 1.15, .9][i] - 1) * (.5 - .5 * Math.cos(t / [.5, .6, .4][i] * Math.PI * 2))), .5, .5));
     case 'Sweat': return [layer(0, 0, clamp(t / .4) * 74 / 114), layer(1, 1, (-.5 + 2.3 * 46 / 74 * clamp(t / .4)) * 74 / 114, 46 / 74)];
-    case 'Surprise': return [anchored(layer(0, 0, -.08 * Math.sin(Math.PI * clamp(t / .3)), 1, .7 + .3 * clamp(t / .3), -10), .5, 1), anchored(layer(1, 1.05, 0, 103 / 60, .7 + .3 * clamp(t / .3), 15), .5, 1)].map((p, i) => ({...p, scaleY: i ? .3 + .7 * clamp(t / .3) : 1}));
+    // Question sits 1.5 start-widths to the right. Upstream never applies imgSetting.angles.
+    case 'Surprise': return [anchored(layer(0, 0, 0, 1, .7 + .3 * clamp(t / .3)), .5, 1), anchored(layer(1, 1.5 * .7, 0, 103 / 60, .7 + .3 * clamp(t / .3)), .5, 1)].map((p, i) => ({...p, scaleY: i ? .3 + .7 * clamp(t / .3) : 1}));
     case 'Sad': return [0, 1, 2].map((i) => ({...layer(0, i * 30 / 88, ([0, 30, -30][i] + 35 * clamp((t - i / 6 - 1 / 15) / (4 / 15))) / 160, 28 / 88, 1, 0, clamp((t - i / 6) * 15)), scaleY: .5 + .5 * clamp((t - i / 6 - 1 / 15) / (4 / 15))}));
     // Steam, Tear and Zzz never call getRelativeScale. Their box is the source
     // texture in spine pixels; animation scale is the Pixi scale, not a second fit.

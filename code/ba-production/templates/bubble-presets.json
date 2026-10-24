@@ -185,6 +185,7 @@
     ],
     "seconds": 1.3,
     "width": 0.27,
+    "nativeWidth": 141,
     "offset": {
       "x": 0.4,
       "y": 0.15
@@ -197,6 +198,7 @@
     ],
     "seconds": 1.3,
     "width": 0.3,
+    "nativeWidth": 88,
     "offset": {
       "x": 0.4,
       "y": 0.0
