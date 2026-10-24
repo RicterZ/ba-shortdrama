@@ -52,11 +52,6 @@
         "y": 0.1258376553914487,
         "width": 0.052307918443985364
       },
-      "Twinkle": {
-        "x": 0.2699582090207865,
-        "y": 0.13050314030474688,
-        "width": 0.043589932036654476
-      },
       "Sigh": {
         "x": 0.455215420176568,
         "y": 0.19115444417762315,
@@ -68,6 +63,6 @@
         "width": 0.06974389125864716
       }
     },
-    "reviewPlacementNote": "Only Dot is measured from the game screenshot. Other named anchors are provisional character-local placements for user screenshot review, not verified official positions. Steam, Zzz and Tear are omitted so they keep the upstream spine offset and native texture size."
+    "reviewPlacementNote": "Only Dot is measured from the game screenshot. Other named anchors are provisional character-local placements for user screenshot review, not verified official positions. Steam, Zzz, Tear and Twinkle are omitted so they keep the upstream spine offset and native texture size."
   }
 }

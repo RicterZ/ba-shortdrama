@@ -127,6 +127,18 @@ test('Steam, Tear and Zzz keep upstream pixel size instead of width*540', () => 
   assert.deepEqual(zzz.map(layer => layer.angle), [15, 5, -15]);
 });
 
+test('Twinkle rest size includes the upstream divide-by-0.5', () => {
+  assert.equal(presets.Twinkle.nativeWidth, 0.08 * 540 / 0.5);
+  const layers = bubbleLayers('Twinkle', 0);
+  assert.deepEqual(layers.map((layer) => layer.width), [1, .9, .6]);
+  assert.deepEqual(layers.map((layer) => layer.x), [0, .7, .8]);
+  assert.deepEqual(layers.map((layer) => layer.y), [0, -.6 * 121 / 134, .6 * 121 / 134]);
+  assert.deepEqual(layers.map((layer) => [layer.anchorX, layer.anchorY]), [[.5, .5], [.5, .5], [.5, .5]]);
+  for (const layer of layers) assert.ok(Math.abs(layer.scale - 1) < 1e-12);
+  const peak = bubbleLayers('Twinkle', .25)[0];
+  assert.ok(Math.abs(peak.scale - 1.2) < 1e-12);
+});
+
 test('Dot keeps the official balloon-to-character size ratio and native dot spacing', () => {
   assert.equal(presets.Dot.nativeWidth, 255);
   assert.equal(presets.Dot.aspectRatio, 255 / 198);

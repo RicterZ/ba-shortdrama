@@ -156,6 +156,7 @@
     ],
     "seconds": 1.4,
     "width": 0.08,
+    "nativeWidth": 86.4,
     "offset": {
       "x": 0.2,
       "y": 0.0

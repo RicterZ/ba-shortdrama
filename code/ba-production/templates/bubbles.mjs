@@ -67,6 +67,8 @@ export function bubbleLayers(name, t, calibration) {
     case 'Angry': return [0, 1, 2].map((i) => layer(0, 0, 0, 1, t < .4 ? 1 - .1 * Math.sin(Math.PI * t / .4) : 1 - .8 * clamp((t - .4) / .1), i * 120)).map((pose) => ({...pose, anchorX: .35, anchorY: -.05}));
     case 'Music': return [layer(0, -clamp(t / .9), .1 * wave(.5), 1, .7 + .3 * clamp(t / .1), -8 * wave(.5))];
     case 'Respond': return [-10, 23, 50].map((angle, i) => ({...layer(0, 0, 0, i === 1 ? 2 : 1.4, 1, angle, .2 + .8 * Math.abs(wave(.6))), anchorX: i === 1 ? 1.5 : 1.8, anchorY: 0}));
+    // Upstream does getRelativeScale(sprite, options) / 0.5, so the first star's
+    // rest width is 0.08*540/0.5. The other two are 0.9 and 0.6 of that width.
     case 'Twinkle': return [[0, 0, 1], [.7, -.6, .9], [.8, .6, .6]].map(([x, y, w], i) => anchored(layer(0, x, y * 121 / 134, w, 1 + ([1.2, 1.15, .9][i] - 1) * (.5 - .5 * Math.cos(t / [.5, .6, .4][i] * Math.PI * 2))), .5, .5));
     case 'Sweat': return [layer(0, 0, clamp(t / .4) * 74 / 114), layer(1, 1, (-.5 + 2.3 * 46 / 74 * clamp(t / .4)) * 74 / 114, 46 / 74)];
     case 'Surprise': return [anchored(layer(0, 0, -.08 * Math.sin(Math.PI * clamp(t / .3)), 1, .7 + .3 * clamp(t / .3), -10), .5, 1), anchored(layer(1, 1.05, 0, 103 / 60, .7 + .3 * clamp(t / .3), 15), .5, 1)].map((p, i) => ({...p, scaleY: i ? .3 + .7 * clamp(t / .3) : 1}));
