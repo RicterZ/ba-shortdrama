@@ -139,6 +139,35 @@ test('Twinkle rest size includes the upstream divide-by-0.5', () => {
   assert.ok(Math.abs(peak.scale - 1.2) < 1e-12);
 });
 
+test('icons inside balloons keep the upstream center instead of a corner offset', () => {
+  const aspect = 255 / 198;
+  const heart = bubbleLayers('Heart', 0)[1];
+  assert.equal(heart.x, .27);
+  assert.equal(heart.y, .16 * 255 / 198);
+  assert.equal(heart.width, .4);
+  const shy = bubbleLayers('Shy', .2);
+  assert.deepEqual([shy[0].anchorX, shy[0].anchorY], [1, 1]);
+  assert.equal(shy[1].x, 1 - .65 * .8);
+  assert.equal(shy[1].y, 1 - .5 * .8 * aspect);
+  assert.equal(shy[1].width, 233 / 255);
+  assert.deepEqual([shy[1].anchorX, shy[1].anchorY], [.5, .5]);
+  const upset = bubbleLayers('Upset', .2)[1];
+  assert.equal(upset.x, .5);
+  assert.equal(upset.y, .5);
+  assert.equal(upset.width, 173 / 255);
+  assert.deepEqual([upset.anchorX, upset.anchorY], [.5, .5]);
+  assert.equal(presets.Upset.nativeWidth, 255);
+  const bulb = bubbleLayers('Bulb', .4);
+  assert.equal(bulb[1].x, .5);
+  assert.equal(bulb[1].y, 100 / 198);
+  assert.equal(bulb[1].width, 83 / 255);
+  assert.deepEqual([bulb[1].anchorX, bulb[1].anchorY], [.5, .5]);
+  assert.equal(bulb[2].y, 82 / 198);
+  assert.equal(bulb[2].width, 130 / 255);
+  assert.equal(bulb[2].scale, 1.13);
+  assert.equal(presets.Bulb.nativeWidth, 255);
+});
+
 test('Dot keeps the official balloon-to-character size ratio and native dot spacing', () => {
   assert.equal(presets.Dot.nativeWidth, 255);
   assert.equal(presets.Dot.aspectRatio, 255 / 198);

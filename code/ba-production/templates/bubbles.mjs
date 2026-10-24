@@ -45,19 +45,26 @@ export function bubbleLayers(name, t, calibration) {
     // Upstream has no Think timeline; this entrance/hold is not official timing.
     case 'Think': return [layer(0, 0, -.03 * Math.sin(Math.PI * clamp(t)), 1, .8 + .2 * clamp(t / .1))];
     case 'Shy': {
+      // Balloon anchor is the bottom-right. The mark's center is measured once
+      // from that corner at the 0.8 start width, then both scale up together.
       const pose = sampleShy(t);
-      return [layer(0, 0, 0, 1, pose.scale), layer(1, .18, .15, .55, pose.scale, pose.angle)];
+      const aspect = 255 / 198;
+      return [
+        anchored(layer(0, 1, 1, 1, pose.scale), 1, 1),
+        anchored(layer(1, 1 - .65 * .8, 1 - .5 * .8 * aspect, 233 / 255, pose.scale, pose.angle), .5, .5),
+      ];
     }
     case 'Heart':
-      return [layer(0), layer(1, .27, .16, .4, 1 + .2 * Math.max(0, wave(.5)))];
+      // heartImg.y uses the balloon width, not its height.
+      return [layer(0), layer(1, .27, .16 * 255 / 198, .4, 1 + .2 * Math.max(0, wave(.5)))];
     case 'Upset':
-      return [layer(0), layer(1, .2, .15, .6, 1 - .2 * Math.abs(wave(.86)), 6 * wave(.4))];
+      return [layer(0), {...anchored(layer(1, .5, .5, 173 / 255, 1, 6 * wave(.4)), .5, .5), scaleY: 1 - .2 * Math.abs(wave(.86))}];
     case 'Dot':
       // Source creates three 39px dots over the 255x198 balloon, positions
       // their container at (10%, 35%), then advances each dot by 2 widths.
       return [layer(0), ...[0, 1, 2].map((i) => layer(1, (calibration?.dotX ?? .1) + i * (calibration?.dotStep ?? 2 * 39 / 255), calibration?.dotY ?? .35, 39 / 255, 1, 0, clamp((t - .3 - i * .4) / .1)))];
     case 'Bulb':
-      return [layer(0, 0, 0, 1, .7 + .3 * clamp(t / .2)), layer(1, .3, .18, .4), layer(2, .25, .08, .5, 1, 0, clamp((t - .2) / .1))];
+      return [layer(0), anchored(layer(1, .5, 100 / 198, 83 / 255), .5, .5), anchored(layer(2, .5, 82 / 198, 130 / 255, 1.13, 0, clamp((t - .2) / .1)), .5, .5)];
     case 'Question':
     case 'Exclaim': {
       const peak = name === 'Question' ? 1.6 : 1.4;
