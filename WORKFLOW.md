@@ -197,6 +197,11 @@ npm run voice -- check
 # 单角色试音，默认写到 local/work/voice-samples/
 npm run voice -- sample --character saiba-momoi --text "老师，早上好。"
 
+# 单气泡或单动作预览，不经过某一集。默认出一段短视频到 local/work/fx-preview/
+# 气泡要这套衣服已经写了 spine。--still 只出中间一帧。
+npm run fx -- preview Heart --character saiba-momoi
+npm run fx -- preview hophop --character saiba-momoi --still
+
 # 为一集生成全部语音（--only L7,L12 只补指定台词；--reuse 跳过已有文件）
 npm run voice -- episode --episode 003-game-dev-sneak --only L7 --timeout 180
 

@@ -16,7 +16,8 @@
     "bg:check": "uv run python scripts/check_backgrounds.py",
     "bg:test": "uv run python scripts/test_backgrounds.py",
     "voice": "uv run python scripts/voice.py",
-    "voice:check": "uv run python scripts/voice.py check"
+    "voice:check": "uv run python scripts/voice.py check",
+    "fx": "uv run python scripts/preview_fx.py"
   },
   "dependencies": {
     "@remotion/cli": "4.0.417",
