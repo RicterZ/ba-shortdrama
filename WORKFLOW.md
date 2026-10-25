@@ -447,13 +447,13 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 
 ## 9. 封面
 
-封面与正片完全解耦：独立 HTML/CSS，用无头 Chrome 截成 1920×1080，不走 Remotion，也不改 `episode.yaml`。源文件与成图放 `videos/<episode>/cover/`（该目录不进版本库）。它和「开头标题卡」不是一回事：标题卡在片头，封面只用于投稿。
+封面与正片完全解耦：独立 HTML/CSS，用无头 Chrome 截成 1440×1080（4:3，B 站封面比例），不走 Remotion，也不改 `episode.yaml`。源文件与成图放 `videos/<episode>/cover/`（该目录不进版本库）。它和「开头标题卡」不是一回事：标题卡在片头，封面只用于投稿。
 
 ### 9.1 先定内容，再排版
 
 - **一句话，最多三行**：每行 3–6 个字，总字数不超过 12；标点是语气的一部分（「！！」「……」），不要写成完整句子。
 - **只留一个重点**：标题 + 人物 + 一个强调色，最多再加一个小贴纸（头像、图标）。不加面板、标签、副标题、说明文字；用户没要求就不加。
-- **缩略图标准**：缩到 480×270 仍要能一眼读完。读不完就删字或加大字号，不要缩行距硬塞。
+- **缩略图标准**：缩到 480×360 仍要能一眼读完。读不完就删字或加大字号，不要缩行距硬塞。
 - **素材**：人物取本集情绪最强的一帧立绘（通常是最新一镜的差分，如 `sprites/default/25.png`）；背景取该集主场景的暗色变体（`data/scenes/<id>/backgrounds/<id>-night.jpg`）。都用 `data/` 里的原图，不要重画。
 
 ### 9.2 字体
@@ -468,11 +468,11 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 - 字体文件放 `cover/fonts/`，用 `@font-face` 以 `file://` 绝对路径引用。无头 Chrome 不联网，不能依赖 Google Fonts 在线加载。
 - 两款站酷字体可从 Google Fonts 下载（OFL），文件名即上表；新集数直接复制 `cover/fonts/` 即可。
 - 两款站酷字体是 SIL OFL：本地生成封面可直接用；一旦把字体文件提交进仓库或随模板分发，必须在 `THIRD_PARTY_NOTICES.md` 登记。
-- 字号 200–260px（1920 宽），行高 1.0–1.06，行间用负 margin（-10 至 -20px）压紧，让标题成为一个块。站酷字体只有单一字重，写了 `font-weight` 也不会变粗；需要更粗就换庆科黄油体或加大字号。
+- 字号 180–220px（1440 宽），行高 1.0–1.06，行间用负 margin（-10 至 -20px）压紧，让标题成为一个块。站酷字体只有单一字重，写了 `font-weight` 也不会变粗；需要更粗就换庆科黄油体或加大字号。
 
 ### 9.3 排版
 
-- **分区**：标题占左侧 45%–55%（`left: 80–110px`，`top: 50–200px`），人物放右侧并允许出画（`right` / `bottom` 取负值，`height` 1300–1400px）。人物完整入画通常显得拘谨。
+- **分区**：标题占左侧 45%–55%（`left: 60–90px`，`top: 150–200px`），人物放右侧并允许出画（`right` / `bottom` 取负值，`height` 1100–1250px）。人物完整入画通常显得拘谨。
 - **可读性**：标题用「深色粗描边 + 实心填充」叠字，保证在任何背景上都清楚：
 
   ```css
@@ -501,16 +501,17 @@ cd videos/<episode>/cover
 # 截图（无头 Chrome，本地文件必须放行）
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
   --headless=new --hide-scrollbars --disable-gpu --allow-file-access-from-files \
-  --screenshot=cover-final.png --window-size=1920,1080 --force-device-scale-factor=1 \
+  --screenshot=cover-final.png --window-size=1440,1080 --force-device-scale-factor=1 \
   "file://$PWD/cover.html"
 
-# 缩略图自检（缩到 480×270 看字是否还可读）
+# 缩略图自检（缩到 480×360 看字是否还可读）
 sips -Z 480 cover-final.png --out thumb-check.png
 
 # 交付 JPG（压到 5MB 以内）
 sips -s format jpeg -s formatOptions 90 cover-final.png --out cover-final.jpg
 ```
 
-- 交付 PNG（无损、便于再编辑）+ JPG（附件上传）；附件上限约 13MB，JPG 控制在 5MB 内。
+- 交付 PNG（1440×1080，4:3）+ JPG（附件上传）；附件上限约 13MB，JPG 控制在 5MB 内。
+- B 站投稿页可能按 16:9 再裁一次，标题和人物的脸尽量留在中间安全区，不要贴边。
 - 每次改稿新建 `cover-<主题>.html`，定稿后删掉中间试验图，`cover/` 只留最终源文件与成图。
 - 出图前对照：缩略图可读；标题不压脸；只有一个强调色；没有面板、标签、水印、免责声明；人物和背景不是同一张图的重复使用。

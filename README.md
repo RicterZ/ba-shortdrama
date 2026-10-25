@@ -2,6 +2,10 @@
 
 用 Remotion 把台本、分镜、角色立绘和合成语音渲染成《蔚蓝档案》风格的剧情短片。代码在 `code/`，角色与场景素材在 `data/`，每集数据在 `videos/<集>/`。
 
+## 内置模板
+- 官方游戏风格：`official`
+- 二创《我是卧底》：`who-is-the-spy`
+
 ## 快速开始
 
 把这个仓库地址交给你的 DeepSeek Hareness / Claude / Codex / Cursor，对她说：
