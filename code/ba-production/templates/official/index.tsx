@@ -1326,7 +1326,7 @@ const BAEpisode: React.FC<Scene> = (scene) => {
               durationInFrames={line.durationInFrames}
               name={`audio-${line.id}`}
             >
-              <Audio src={staticFile(line.audio)} />
+              {line.audio ? <Audio src={staticFile(line.audio)} /> : null}
             </Sequence>
             {ui?.sfx?.click && ui.lineClick !== false && line.from >= introEnd ? (
               <Sfx

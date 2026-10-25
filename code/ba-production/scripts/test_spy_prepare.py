@@ -8,6 +8,36 @@ import prepare
 
 
 class ReactionTimingTest(unittest.TestCase):
+    def test_silent_and_voiced_lines_keep_audio_and_timing_in_shots(self):
+        script = lib.normalize_script([
+            {"id": "L1", "speaker": "c", "text": "Silent caption", "silent": True},
+            {"id": "L2", "speaker": "c", "text": "Voiced caption"},
+        ])
+        with tempfile.TemporaryDirectory() as tmp:
+            episode = Path(tmp)
+            (episode / "audio").mkdir()
+            (episode / "audio/001.mp3").write_bytes(b"reused audio")
+            with patch.object(prepare.voice, "synthesize_line") as synth, patch.object(
+                lib, "probe_duration", return_value=2.0
+            ):
+                timed, _, _ = prepare.build_timing(
+                    script, {"c": {"default_outfit": "default", "voice": {}}}, {},
+                    episode, 30, lib.DEFAULT_TIMING, True, 30, False,
+                )
+            synth.assert_not_called()
+            shots, _, _ = prepare.build_shots(
+                [{"id": "S1", "lines": ["L1", "L2"]}], timed,
+                lib.DEFAULT_TIMING, {}, {"c": "default"},
+            )
+            silent, voiced = shots[0]["lines"]
+            self.assertEqual(silent["audio"], "")
+            self.assertEqual(silent["text"], "Silent caption")
+            self.assertEqual(silent["durationInFrames"], timed[0]["frames"])
+            self.assertEqual(voiced["from"], silent["from"] + silent["durationInFrames"])
+            self.assertEqual(voiced["audio"], "audio/001.mp3")
+            self.assertEqual((episode / "raws/audio/001.mp3").read_bytes(), b"reused audio")
+            self.assertFalse((episode / "raws/audio/000.mp3").exists())
+
     def test_reactions_keep_duration_at_start_middle_and_end(self):
         board = [
             {"id": "R0", "lines": [], "durationInFrames": 60},
