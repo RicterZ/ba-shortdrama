@@ -378,7 +378,7 @@ def build(scene, raws, output):
             ui = scene.get("ui", {})
             click = ui.get("sfx", {}).get("click")
             thought = spy and line.get("kind") == "thought"
-            if click and not thought and ui.get("lineClick", True) and a >= ms(scene.get("intro", {}).get("durationInFrames", 0)):
+            if click and not thought and ui.get("lineClick", True) and a >= ms((scene.get("intro") or {}).get("durationInFrames", 0)):
                 audio(click, a, min(end_ms, a + ms(10)), 2, ui.get("lineClickVolume", .14))
         if spy and shot.get("voteTags"):
             vote_from = max(line["from"] + line["durationInFrames"] for line in lines) if lines else start_frame
@@ -394,7 +394,7 @@ def build(scene, raws, output):
                         scale=caption_scale(size), rotation=-2,
                         color=scene["characters"].get(tag["speaker"], {}).get("color", "#ffffff"),
                         outline="#08111f")
-    intro = scene.get("intro", {})
+    intro = scene.get("intro") or {}
     caption(intro.get("title"), 0, ms(intro.get("durationInFrames", 0)))
     bgm = scene.get("bgm")
     if bgm:
