@@ -574,6 +574,33 @@ def main() -> int:
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
+    # Inner monologue is voiced too. Synthesize it before the timeline so the
+    # reaction shot can grow to fit the clip instead of clipping the thought.
+    monologue_files: dict[str, Path] = {}
+    for shot in board:
+        mono = shot.get("monologue")
+        if not mono:
+            continue
+        speaker = mono.get("speaker")
+        if speaker not in characters:
+            raise SystemExit(
+                f"镜头 {shot['id']} 的 monologue.speaker={speaker!r} 不在 episode.characters 中"
+            )
+        target = episode / "audio" / f"mono-{shot['id']}.mp3"
+        if not (args.reuse_audio and target.is_file()):
+            voice.synthesize_line(
+                mono.get("text", ""),
+                characters[speaker]["voice"],
+                target,
+                args.voice_timeout,
+                args.voice_fallback,
+            )
+        seconds = lib.probe_duration(target)
+        needed = math.ceil(seconds * fps) + 12
+        declared = int(shot.get("durationInFrames") or 0)
+        shot["durationInFrames"] = max(declared, needed)
+        monologue_files[shot["id"]] = target
+
     # A run of line-less reaction shots after a dialogue shot becomes a silent
     # gap after that shot's last line, so the reaction keeps its full duration
     # without colliding with the next line.
@@ -685,6 +712,18 @@ def main() -> int:
         system_audio_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, system_audio_dir / source.name)
         shot["systemVoice"] = f"audio/{source.name}"
+
+    # Voice the inner monologue: copy its clip next to the dialogue audio.
+    for shot in shots:
+        mono = shot.get("monologue")
+        if not mono:
+            continue
+        target = monologue_files.get(shot["id"])
+        if target is None:
+            continue
+        system_audio_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(target, system_audio_dir / target.name)
+        mono["audio"] = f"audio/{target.name}"
 
     # Scene backgrounds are supplied by the owner; copy them into the episode snapshot.
     seen_scenes: set[int] = set()

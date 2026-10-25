@@ -84,6 +84,10 @@
               },
               "text": {
                 "type": "string"
+              },
+              "audio": {
+                "type": "string",
+                "description": "可选；不写时 prepare 用 speaker 的音色合成。"
               }
             }
           },

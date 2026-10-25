@@ -151,7 +151,7 @@ type Shot = {
   /** Character held in the spotlight: others and the room dim around them. */
   focus?: string | null;
   /** Inner monologue. Only shown after the shot's last line ends. */
-  monologue?: { speaker: string; text: string } | null;
+  monologue?: { speaker: string; text: string; audio?: string | null } | null;
   /** Vote result tags shown on the characters after the last line. */
   voteTags?: Array<{ speaker: string; text: string }> | null;
   /** One-shot system voice (vote announcer) played at the start of the shot. */
@@ -1340,12 +1340,18 @@ const ThoughtText: React.FC<{
         zIndex: 31,
       }}
     >
-      <div style={{ transform: 'rotate(-1deg)', opacity: 0.96 }}>
+      <div
+        style={{
+          transform: 'rotate(-1deg)',
+          opacity: 0.96,
+          filter: `drop-shadow(0 0 ${size * 0.5}px ${color}66)`,
+        }}
+      >
         <OutlineText
           text={text}
-          fill={color}
+          fill="#ffffff"
           inner="#ffffff"
-          outer="#08111f"
+          outer="#0b1119"
           size={size}
           innerWidth={size * 0.045}
           outerWidth={size * 0.13}
@@ -1422,41 +1428,21 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
         style={{
           position: 'absolute',
           inset: 0,
+          // Stage light, not a colour filter: keep the room readable, drop the
+          // exposure a stop and let saturation fall off naturally.
           filter: focusEntry
-            ? 'saturate(0.4) brightness(0.5) contrast(0.98)'
+            ? 'brightness(0.46) saturate(0.72) contrast(1.02)'
             : undefined,
         }}
       >
         <SceneBackdrop shot={shot} />
-        {focusEntry ? (
-          <>
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                background: '#060f20',
-                opacity: 0.82,
-                mixBlendMode: 'multiply',
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                background: '#0d2144',
-                opacity: 0.18,
-                mixBlendMode: 'color',
-              }}
-            />
-          </>
-        ) : null}
       </div>
       <AbsoluteFill>
         <AbsoluteFill
           style={{
-            background: `radial-gradient(circle at ${(focusEntry?.x ?? speakingX) * 100}% 48%, rgba(255,255,255,${
-              focusEntry ? 0.28 : 0.16
-            }), rgba(255,255,255,0) ${focusEntry ? 44 : 52}%)`,
+            background: `radial-gradient(circle at ${(focusEntry?.x ?? speakingX) * 100}% 46%, rgba(255,240,214,${
+              focusEntry ? 0.4 : 0.16
+            }), rgba(255,240,214,0) ${focusEntry ? 48 : 52}%)`,
           }}
         />
         {ordered.map((entry) => {
@@ -1470,7 +1456,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
                 inset: 0,
                 opacity: 1,
                 filter: dimmed
-                  ? 'grayscale(1) brightness(0.34) sepia(0.6) hue-rotate(190deg) saturate(1.2)'
+                  ? 'grayscale(0.72) brightness(0.38) saturate(0.6)'
                   : undefined,
                 zIndex: isFocus ? 6 : 3,
               }}
@@ -1492,6 +1478,10 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
 
       {shot.systemVoice ? (
         <Audio src={staticFile(shot.systemVoice)} />
+      ) : null}
+
+      {shot.monologue?.audio ? (
+        <Audio src={staticFile(shot.monologue.audio)} />
       ) : null}
 
       {tailActive && shot.monologue ? (
@@ -1692,6 +1682,7 @@ registerRoot(() => (
     height={720}
   />
 ));
+
 
 
 
