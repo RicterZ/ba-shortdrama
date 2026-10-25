@@ -154,6 +154,8 @@ type Shot = {
   monologue?: { speaker: string; text: string } | null;
   /** Vote result tags shown on the characters after the last line. */
   voteTags?: Array<{ speaker: string; text: string }> | null;
+  /** One-shot system voice (vote announcer) played at the start of the shot. */
+  systemVoice?: string | null;
   characters: Array<{
     id: string;
     outfit: string;
@@ -1488,6 +1490,10 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
 
       <WordLabels shot={shot} height={height} />
 
+      {shot.systemVoice ? (
+        <Audio src={staticFile(shot.systemVoice)} />
+      ) : null}
+
       {tailActive && shot.monologue ? (
         <ThoughtText
           text={shot.monologue.text}
@@ -1498,35 +1504,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
       ) : null}
 
       {tailActive && shot.voteTags?.length ? (
-        <>
-          <div
-            style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              top: height * 0.13,
-              display: 'flex',
-              justifyContent: 'center',
-              zIndex: 30,
-            }}
-          >
-            <div
-              style={{
-                padding: `${height * 0.012}px ${height * 0.03}px`,
-                background: 'rgba(8,16,30,0.78)',
-                border: '1px solid rgba(255,255,255,0.55)',
-                borderRadius: 4,
-                color: '#ffffff',
-                fontFamily: MEME_FONT,
-                fontWeight: 700,
-                fontSize: height * 0.032,
-                letterSpacing: 2,
-              }}
-            >
-              发言结束 · 开始投票
-            </div>
-          </div>
-          {shot.voteTags.map((tag) => {
+        shot.voteTags.map((tag) => {
             const entry = shot.characters.find((char) => char.id === tag.speaker);
             if (!entry) return null;
             const size = height * 0.05;
@@ -1552,8 +1530,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
                 />
               </div>
             );
-          })}
-        </>
+          })
       ) : null}
 
       {showUi ? (

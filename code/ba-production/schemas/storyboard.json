@@ -105,6 +105,10 @@
               }
             }
           },
+          "systemVoice": {
+            "type": "string",
+            "description": "镜头开头的系统语音，路径相对工作区或本集目录。"
+          },
           "transition": {
             "oneOf": [
               {

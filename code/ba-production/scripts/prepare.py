@@ -508,6 +508,7 @@ def build_shots(
                 "focus": raw.get("focus"),
                 "monologue": raw.get("monologue"),
                 "voteTags": raw.get("voteTags"),
+                "systemVoice": raw.get("systemVoice"),
                 "characters": characters,
                 "lines": shot_lines,
                 "choices": choices,
@@ -666,6 +667,24 @@ def main() -> int:
             "fadeInFrames": int(bgm_cfg.get("fadeInFrames", 45)),
             "fadeOutFrames": int(bgm_cfg.get("fadeOutFrames", 75)),
         }
+
+    # Per-shot system voice (vote announcer and similar) is copied verbatim.
+    system_audio_dir = raws / "audio"
+    for shot in shots:
+        source_value = shot.get("systemVoice")
+        if not source_value:
+            continue
+        source = Path(source_value)
+        if not source.is_absolute():
+            candidate = lib.ROOT / source_value
+            if not candidate.is_file():
+                candidate = episode / source_value
+            source = candidate
+        if not source.is_file():
+            raise SystemExit(f"镜头 {shot['id']} 的 systemVoice 不存在：{source_value}")
+        system_audio_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, system_audio_dir / source.name)
+        shot["systemVoice"] = f"audio/{source.name}"
 
     # Scene backgrounds are supplied by the owner; copy them into the episode snapshot.
     seen_scenes: set[int] = set()
