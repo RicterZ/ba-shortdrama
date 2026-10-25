@@ -253,9 +253,9 @@ def build(scene, raws, output):
                 audio(line["audio"], a, b, 0)
             ui = scene.get("ui", {})
             click = ui.get("sfx", {}).get("click")
-            if click and ui.get("lineClick", True) and a >= ms(scene.get("intro", {}).get("durationInFrames", 0)):
+            if click and ui.get("lineClick", True) and a >= ms((scene.get("intro") or {}).get("durationInFrames", 0)):
                 audio(click, a, min(end_ms, a + ms(10)), 2, ui.get("lineClickVolume", .14))
-    intro = scene.get("intro", {})
+    intro = scene.get("intro") or {}
     caption(intro.get("title"), 0, ms(intro.get("durationInFrames", 0)))
     bgm = scene.get("bgm")
     if bgm:
