@@ -1188,6 +1188,9 @@ const Intro: React.FC<{ intro: NonNullable<Scene['intro']>; scene: Scene }> = ({
 
 const MEME_FONT = '"Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC", sans-serif';
 
+// Chinese captions drop the full stop; keep the TTS text untouched.
+const withoutPeriod = (text: string) => text.replace(/。/g, '');
+
 // Two stacked text layers: a thick outer stroke behind, then fill + inner
 // white stroke on top. Gives the double outline used by the reference memes.
 const OutlineText: React.FC<{
@@ -1479,7 +1482,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
 
       {tailActive && shot.monologue ? (
         <ThoughtText
-          text={shot.monologue.text}
+          text={withoutPeriod(shot.monologue.text)}
           color={scene.characters[shot.monologue.speaker]?.color || '#ffffff'}
           width={width}
           height={height}
@@ -1532,7 +1535,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
             captionStyle === 'meme' ? (
               <MemeCaption
                 key={`caption-${activeLine.id}`}
-                text={activeLine.text}
+                text={withoutPeriod(activeLine.text)}
                 color={scene.characters[activeLine.speaker]?.color || '#ffffff'}
                 width={width}
                 height={height}
@@ -1541,7 +1544,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
               <DialogueBox
                 key={activeLine.id}
                 speaker={activeLine.speaker}
-                text={activeLine.text}
+                text={withoutPeriod(activeLine.text)}
                 character={scene.characters[activeLine.speaker]}
                 lineFrame={frame - (activeLine.from - shot.from)}
               />
@@ -1550,7 +1553,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
             captionStyle === 'meme' ? (
               <MemeCaption
                 key={`${shot.id}-prompt`}
-                text={shot.choices.prompt}
+                text={withoutPeriod(shot.choices.prompt)}
                 color={scene.characters[promptSpeaker]?.color || '#ffffff'}
                 width={width}
                 height={height}
@@ -1559,7 +1562,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
               <DialogueBox
                 key={`${shot.id}-prompt`}
                 speaker={promptSpeaker}
-                text={shot.choices.prompt}
+                text={withoutPeriod(shot.choices.prompt)}
                 character={scene.characters[promptSpeaker]}
                 lineFrame={frame - (shot.choices.fromFrame ?? 0)}
                 prompt
