@@ -345,10 +345,10 @@ class IntroHoldTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             episode = Path(tmp)
             without, _, _ = prepare.build_timing(
-                script, characters, {"L1": "default"}, episode, 30, TIMING, False, 30, False, intro_hold=0
+                script, characters, {"L1": "default"}, episode, 30, TIMING, False, 30, False, intro_hold=0, board=board(1)
             )
             with_card, _, _ = prepare.build_timing(
-                script, characters, {"L1": "default"}, episode, 30, TIMING, False, 30, False, intro_hold=40
+                script, characters, {"L1": "default"}, episode, 30, TIMING, False, 30, False, intro_hold=40, board=board(1)
             )
         self.assertEqual(without[0]["start"], TIMING["lead_in_frames"])
         self.assertEqual(with_card[0]["start"], 40 + TIMING["lead_in_frames"])

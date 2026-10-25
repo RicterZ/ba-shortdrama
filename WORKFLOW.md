@@ -289,7 +289,14 @@ npm run voice -- episode --episode 003-game-dev-sneak --only L7 --timeout 180
 npm run voice -- episode --episode 003-game-dev-sneak --fallback
 ```
 
-`voice.py` 负责 provider、重试、首尾静音裁剪和错误码输出；`episode` 只写 `audio/NNN.mp3`，时间轴仍由 prepare 重建。Vocu 整集默认走异步多句接口（`--sync` 可强制逐句同步），`check` 默认只做音色查询、不触发合成。三个 provider 都从各自 profile 的 `voice` 读取，`vocu` 的主机是 `https://v1.wusound.cn`。
+`voice.py` 负责 provider、重试、首尾静音裁剪和错误码输出；`episode` 只写 `audio/<shot.id>-<line.id>.mp3`（例如 `S1-L1.mp3`、`S2-L4.mp3`），时间轴仍由 prepare 重建。Vocu 整集默认走异步多句接口（`--sync` 可强制逐句同步），`check` 默认只做音色查询、不触发合成。三个 provider 都从各自 profile 的 `voice` 读取，`vocu` 的主机是 `https://v1.wusound.cn`。
+
+对白命名和旧录音复用：
+
+- 分镜号来自 `storyboard.json` 的实际 `shot.id`，台词号保留 `script.json` 的原始 `line.id`，不随数组顺序或镜头内位置重新编号。每句必须恰好属于一个镜头；ID 只能使用 ASCII 字母、数字、下划线、连字符，首字符不能为连字符，最多 100 字符。拒绝重复镜头、重复归属、未知台词、缺失归属、大小写不敏感文件名冲突；`mono` 分镜 ID 保留给心理配音命名空间。
+- `voice episode --only L4` 只补配指定台词；`--reuse` 跳过已有语义文件。`prepare --reuse-audio` 使用相同规则，复制到 `raws/audio/`，同步重建 `audio/timing.json` 与 `project/scene.json` 中的引用。静默台词不生成或复用音频。修改镜头归属会改变文件名，需核对录音后复制到新名称，或重新合成。
+- 旧版纯序号录音不按当前数组下标猜测。复用时，只有旧 `audio/timing.json` 中台词 ID 唯一、说话人、字幕及实际配音文本都匹配，且引用明确指向存在的 `audio/000.mp3` 等文件，才复制为新名称。原录音保留，不覆盖已有新名称文件。缺失或不匹配的映射会在生成前报错；请核对旧时间轴/录音，手动复制确认的音频到对应新名称，再运行 `prepare --reuse-audio`。有 `voice_text` 的旧录音若时间轴未保存实际配音文本，也需人工确认。不要只重命名文件后直接渲染。
+- `--dry-run` 不迁移文件。`voice retrim` 按相同映射裁剪对白；BGM、系统播报和心理配音维持各自独立命名。没有复用选项时会重新合成新名称文件，不删除旧序号文件。
 
 ```sh
 EPISODE=003-summer-patch npm run ep:prepare
@@ -297,7 +304,7 @@ EPISODE=003-summer-patch npm run ep:prepare
 
 会做四件事：
 
-1. 用 `voice.py` 的同一套 provider 合成 `audio/NNN.mp3`（支持 Vocu / Fish Audio / Edge TTS，可按角色混用；加 `--voice-fallback` 使用该 profile 的备用 provider），复制到 `raws/audio/`。
+1. 用 `voice.py` 的同一套 provider 合成 `audio/<shot.id>-<line.id>.mp3`（支持 Vocu / Fish Audio / Edge TTS，可按角色混用；加 `--voice-fallback` 使用该 profile 的备用 provider），按同名复制到 `raws/audio/`。
 2. 裁掉每句首尾静音，再用 ffprobe 实测时长，按 `ceil(时长×fps) + 14 帧` 计算时间轴。
 3. 把本集用到的立绘按服装复制到 `raws/images/`，缺失表情回退到 default 并打印警告；场景背景图也复制进快照，缺图时警告。
 4. 生成 `project/scene.json`（渲染输入）、`audio/timing.json`（可读时间轴）、`assets.lock.json`（素材哈希）。
