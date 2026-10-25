@@ -394,9 +394,9 @@ def trim_silence(path: Path) -> None:
                 "-i",
                 str(path),
                 "-af",
-                "silenceremove=start_periods=1:start_duration=0:start_threshold=-45dB,"
+                "silenceremove=start_periods=1:start_duration=0:start_silence=0.08:start_threshold=-50dB,"
                 "areverse,"
-                "silenceremove=start_periods=1:start_duration=0:start_threshold=-45dB,"
+                "silenceremove=start_periods=1:start_duration=0:start_silence=0.08:start_threshold=-50dB,"
                 "areverse,"
                 "silenceremove=stop_periods=-1:stop_duration=0.6:stop_threshold=-40dB:stop_silence=0.28",
                 "-c:a",
