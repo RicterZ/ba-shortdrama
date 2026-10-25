@@ -355,11 +355,23 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 
 ### 导出到必剪
 
-`prepare` 之后可以把这一集写成必剪草稿，在必剪里改轨道、字幕、配音、BGM 和立绘。
+`prepare` 之后可以把这一集写成必剪草稿，在必剪中调整分层素材、时间、配音和 BGM：
 
 ```sh
 EPISODE=003-game-dev-sneak npm run ep:bcut
 ```
+
+默认逐帧调用原视频模板，导出背景、舞台角色层、界面、完整字幕和片头。`official` 与 `who-is-the-spy` 都支持。对白底部渐暗、姓名与社团、按钮、气泡、动作、转身、走位、聚光灯、双描边以及打字效果使用原模板绘制；配音、系统语音、按钮和气泡音效、BGM 以音频片段保留。连续相同画面复用同一素材，动态段保留每帧并打包为透明 MOV，避免导入几千张 PNG 耗尽必剪文件句柄；长视频导出会较慢。
+
+这些视觉层是静态 PNG 或保留透明通道的 MOV，可以移动、缩放、替换或调整时间。**默认字幕也是渲染素材，文字和动画不是必剪原生文本与关键帧。** 要在必剪中直接修改对白正文或谁是卧底的文字，可显式选择：
+
+```sh
+EPISODE=003-game-dev-sneak npm run ep:bcut -- --captions editable
+```
+
+该模式保留对白框、姓名、社团和界面图片，将正文改成原生字幕；不保留正文逐字出现和转场淡入淡出。原生字体排版与渲染字幕有差别，导出后应在必剪中检查。谁是卧底的词牌、投票字、心理字幕和发言也会生成原生可编辑文本；字形、描边与原模板不同，原生文字的叠放与动画采用近似效果。
+
+角色轨按舞台叠放次序安排，同一轨在不同镜头可能对应不同角色。转场期间单独使用短的完整画面片段，避免多个透明层分别叠化造成错误；转场内修改某个角色后需要重新生成该转场。谁是卧底片头也采用短的完整合成片段，以保留原模板里角色、词牌与片头的交错层级。详细说明与像素对比检查见 `docs/bcut-layers.md`。
 
 产物在 `videos/<episode>/output/bcut-<id>/`：`draft.bjson`、`assets/`、`cover.jpg`、`install_bcut.py`、`manifest.json`。必剪完全退出后，进入这个目录执行：
 
@@ -367,25 +379,9 @@ EPISODE=003-game-dev-sneak npm run ep:bcut
 python install_bcut.py --bcut-closed
 ```
 
-Windows 默认写入 `~/Documents/Bcut Drafts`，macOS 默认写入 `~/Movies/Bcut Drafts`。必剪偏好设置里的草稿目录若不是这个，加上 `--draft-root`。安装只新建一个草稿，并给原来的 `draftInfo.json` 留一份备份。
+Windows 默认写入 `~/Documents/Bcut Drafts`，macOS 默认写入 `~/Movies/Bcut Drafts`。必剪偏好设置里的草稿目录若不同，加上 `--draft-root`。安装只新建一个草稿，并给原来的 `draftInfo.json` 留一份备份。原生字幕字体在接收电脑上解析，自动找不到时用 `--font-path` 指向已安装的中文 TTF 字体。
 
-草稿按必剪 3.10.3 的明文 JSON 写成，字段结构来自 MIT 项目 dsh-bcut-edit，见 `THIRD_PARTY_NOTICES.md`。背景在最底下一轨，每个角色单独一轨。立绘按分镜位置做成透明底全画布图：说话时换成该句表情，说完回到镜头常驻脸，`holdEmotion` 和 `emotionCues` 照 `scene.json` 保留。配音、逐句点击音和 BGM 各占一条音频轨，字幕是可改文本。
-
-它不是成片的逐帧复刻。没有镜头运动、转场叠化、入场、走位、转身、气泡和界面按钮，片头只放标题。谁是卧底会带上词牌、底部大字幕、心理字幕、投票字、系统语音，以及 BGM 的静音段和替换曲；词牌和投票字按角色的横向位置摆，大字幕在底部，心理字幕再高一截。描边是必剪的单层描边。聚光灯只把背景和其他角色压暗。相邻镜头如果带转场，必剪里改成硬切，避免两段叠在同一时刻。本机未安装必剪，字幕坐标还没有在应用里对过。
-
-## 7. 审片与发布
-
-- 先看预览帧，再完整看片。`review.json` 记录看过的帧、是否完整听音、缺失项。
-- `publication_approved` 默认 `false`，不要在没有人工确认的情况下改成 `true`。
-- 投稿是人工操作，没有自动发布。
-- 公开发布前必须确认素材权利，见 `ASSETS.md`。
-
-## 8. 迭代原则
-
-- 改台词 → 重新 prepare（会重新合成语音）→ validate → preview → 审片 → final。
-- 只改画面/站位/镜头 → `prepare --reuse-audio` → validate → preview，避免重复合成。
-- 新角色：先 `npm run res:kivo -- student <kivo id> --portrait --spine` 拉信息与素材，再 `npm run res:sprites -- get <英文名>` 拉全部服装的全部表情立绘；然后在 `data/characters/<id>/` 建 `profile.yaml`（人设参考 `kivo/summary.json`、`voice` provider/音色、`outfits` 立绘表），由 `profile.json` schema 校验；最后到 `episode.yaml` 的 `characters` 里引用。多套衣服就在 `outfits` 下加条目，分镜用 `outfit` 选择，`emotion` 可用原始索引或已登记的语义别名。
-- 新场景：先从 `data/backgrounds/manifest.json` 选图（或运行 `npm run bg:build` 重建），再在 `data/scenes/<id>/scene.yaml` 建配置，`image` 写相对场景目录的 `backgrounds/<id>-<variant>.jpg`；由 `scene.json` schema 校验，`npm run bg:check` 会核对图片存在、哈希、命名和重复登记。分镜用 `scene` 引用。没有对应 renderer 时先在模板里实现，不要用代码现画房间。
+草稿基于必剪 3.10.3 的明文 JSON，字段结构来自 MIT 项目 dsh-bcut-edit，见 `THIRD_PARTY_NOTICES.md`。工程生成和像素比较通过，仍不能代替应用验收：必须打开导入的草稿，检查资源是否缺失、画面位置与文字是否正确，再检查音频同步与转场。不要仅凭工程 JSON 存在就认定交付完成。
 
 ### 角色内置动作（首批已接入）
 

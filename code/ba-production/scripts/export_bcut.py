@@ -164,7 +164,7 @@ def template(name):
     return fresh(value)
 
 
-def build(scene, raws, output):
+def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
     ep = scene["episode"]
     template_id = ep.get("template", "official")
     if template_id not in {"official", "who-is-the-spy"}:
@@ -193,6 +193,13 @@ def build(scene, raws, output):
             "谁是卧底的词牌、大字幕、心理字幕和投票字按画面位置写成字幕。描边是必剪的单层描边。"
             "聚光灯只压暗背景和其他角色，没有径向光。"
         )
+    if visual_layers:
+        warnings = [
+            "画面由制作模板逐帧分层渲染，保留动画、气泡、界面与字幕。背景、角色层和界面可以独立移动、裁剪。",
+            "静态画面为 PNG，动画为无损透明 MOV，不是必剪原生关键帧；转场期间使用短暂的合成画面。",
+            "正文为可编辑字幕，字形、换行和出字效果与原片存在差异。" if editable_captions else
+            "字幕为原样渲染的图层；修改文字需修改脚本后重新导出。",
+        ]
 
     def source(relative):
         path = (raws / relative).resolve()
@@ -225,18 +232,31 @@ def build(scene, raws, output):
         if end <= start:
             return
         clip = template("image_clip")
+        # Legacy Windows crop effects without crop geometry become 0x0 crops
+        # in macOS Bcut, producing infinities and a completely black preview.
+        clip["fxs"] = [fx for fx in clip["fxs"] if fx.get("businessType") != 2]
+        clip["propertyFxList"] = []
         path = TOKEN + name
         label = label or name
         clip.update(inPoint=start, outPoint=end, trimIn=0, trimOut=end-start,
                     sourcePath=path, originalFilePath=path)
-        with Image.open(assets / name) as im:
-            w, h = im.size
+        video = name.endswith(".mov")
+        if video:
+            w, h = width, height
+            clip["mediaType"] = 0
+            clip["assetInfo"].update(assetItemType=4, type=1, videoType=1,
+                                     frameRateNum=fps, frameRateDen=1, duration=end-start)
+        else:
+            with Image.open(assets / name) as im:
+                w, h = im.size
         clip["assetInfo"].update(srcPath=path, width=w, height=h,
                                   displayName=label, itemName=name, content=label)
         track("video", index).append(clip)
         if path not in registered:
             item = template("browser_file_image")
             item.update(srcPath=path, width=w, height=h, duration="0")
+            if video:
+                item.update(itemType=4, frameRateNum=fps, frameRateDen=1, duration=str(end-start))
             draft["mainWindow"]["browserPanelFiles"].append(item)
             registered.add(path)
 
@@ -246,8 +266,6 @@ def build(scene, raws, output):
             return
         clip = template("caption")
         clip.update(captionText=text, inPoint=start, outPoint=end)
-        for key in ("defaultFontPath", "fontPackagePath"):
-            clip[key] = ""
         if x is not None:
             clip["transX"] = x
         if y is not None:
@@ -261,11 +279,21 @@ def build(scene, raws, output):
             clip["outlineColor"] = hex_rgb(outline)
         if rotation is not None:
             clip["rotation"] = rotation
-        clip["assetInfo"].update(content=text, displayName=text, duration=end-start,
-                                  fontSrcPath="")
+        clip["assetInfo"].update(content=text, displayName=text, duration=end-start)
         track("caption", index).append(clip)
 
-    def audio(relative, start, end, index, volume=1, loop=False, fade_in=0, fade_out=0):
+    def native_dialogue(text, start, end):
+        lines = text.splitlines() or [text]
+        advance = max(sum(1 if ord(c) > 255 else .55 for c in row) for row in lines)
+        text_width = advance * height * .038
+        caption(text, ms(start), ms(end),
+                x=2 * (.09 + text_width / width / 2 - .5),
+                y=caption_y_top(.76, .038 * len(lines)), scale=.4256)
+        if end > start and text:
+            item = tl["captionTracks"][0]["captions"][-1]
+            item.update(drawOutline=False, textAlignment=0)
+
+    def audio(relative, start, end, index, volume=1, loop=False, fade_in=0, fade_out=0, trim_in=0):
         if not math.isfinite(volume) or volume < 0:
             raise ValueError("Invalid audio volume")
         name = copied(relative)
@@ -276,12 +304,16 @@ def build(scene, raws, output):
         total = round(duration * 1000)
         if total <= 0:
             raise ValueError(f"Unknown audio duration: {relative}")
+        if loop:
+            trim_in %= total
         first = start
         while start < end:
-            span = min(total, end - start)
+            span = min(total - trim_in, end - start)
+            if span <= 0:
+                break
             clip = template("audio_clip")
             path = TOKEN + name
-            clip.update(inPoint=start, outPoint=start+span, trimIn=0, trimOut=span,
+            clip.update(inPoint=start, outPoint=start+span, trimIn=trim_in, trimOut=trim_in+span,
                         sourcePath=path, originalFilePath=path, materialId="", markSet=[],
                         fadeIn=min(fade_in, span) if start == first else 0,
                         fadeOut=min(fade_out, span) if start+span == end else 0)
@@ -290,6 +322,7 @@ def build(scene, raws, output):
             clip["fxs"][0]["gainValue"] = 20 * math.log10(volume) if volume else -120
             track("audio", index).append(clip)
             start += span
+            trim_in = 0
             if not loop:
                 break
 
@@ -299,9 +332,13 @@ def build(scene, raws, output):
         start_frame, end_frame = visible_bounds(shots, index)
         start, end = ms(start_frame), ms(end_frame)
         bg = shot.get("scene", {}).get("image")
-        if not bg:
+        if not bg and not visual_layers:
             raise ValueError(f"Shot {shot['id']} has no snapshot background image")
-        name = copied(bg)
+        if bg:
+            name = copied(bg)
+        else:
+            name = f"cover-placeholder-{uuid.uuid4().hex}.png"
+            Image.new("RGB", (width, height), "#101820").save(assets / name)
         focus = shot_focus(shot) if spy else None
         with Image.open(assets / name) as im:
             bg_name = f"background-{uuid.uuid4().hex}.png"
@@ -319,6 +356,8 @@ def build(scene, raws, output):
             track_index = characters.index(entry["id"]) + 1
             for a, b, emotion in expression_spans(entry, shot, start_frame, end_frame):
                 original = sprites.get(emotion) or sprites.get("default")
+                if not original and visual_layers:
+                    continue
                 if not original:
                     raise ValueError(f"{entry['id']}/{outfit_id} has no sprite for {emotion}")
                 original_name = copied(original)
@@ -357,7 +396,8 @@ def build(scene, raws, output):
                     color="#ff9ab7" if secret else "#a9dcff",
                     outline="#ff5f8f" if secret else "#123a5a")
         if spy and shot.get("systemVoice"):
-            audio(shot["systemVoice"], start, end, 3)
+            audio(shot["systemVoice"], start,
+                  min(end_ms, ms(shot["from"] + shot["durationInFrames"])), 3)
         lines = shot.get("lines") or []
         for line in lines:
             a, b = ms(line["from"]), ms(line["from"] + line["durationInFrames"])
@@ -366,13 +406,17 @@ def build(scene, raws, output):
                 size = meme_size(shown, 0.048, 0.7)
                 caption(shown, a, b, y=caption_y_bottom(0.17, size), scale=caption_scale(size),
                         color="#ffffff", outline="#0b1119", rotation=-1)
-            elif spy:
+            elif spy and (not visual_layers or ep.get("style", {}).get("caption_style", "ba") == "meme"):
                 size = meme_size(shown, 0.098, 0.84)
                 color = scene["characters"].get(line["speaker"], {}).get("color", "#ffffff")
                 caption(shown, a, b, y=caption_y_bottom(0.06, size), scale=caption_scale(size),
                         color=color, outline=color, rotation=-1.2)
             else:
-                caption(shown, a, b)
+                if visual_layers and editable_captions:
+                    native_dialogue(shown, max(line["from"], (scene.get("intro") or {}).get("durationInFrames", 0)),
+                                    line["from"] + line["durationInFrames"])
+                else:
+                    caption(shown, a, b)
             if line.get("audio"):
                 audio(line["audio"], a, b, 0)
             ui = scene.get("ui", {})
@@ -395,7 +439,60 @@ def build(scene, raws, output):
                         color=scene["characters"].get(tag["speaker"], {}).get("color", "#ffffff"),
                         outline="#08111f")
     intro = scene.get("intro") or {}
-    caption(intro.get("title"), 0, ms(intro.get("durationInFrames", 0)))
+    if not visual_layers:
+        caption(intro.get("title"), 0, ms(intro.get("durationInFrames", 0)))
+    if visual_layers:
+        from render_bcut_layers import render_layers, effect_audio_events
+        # Replace static approximations with the same components used by the video.
+        tl["videoTracks"] = []
+        draft["mainWindow"]["browserPanelFiles"] = []
+        registered.clear()
+        if not (editable_captions and spy):
+            tl["captionTracks"] = []
+        spans = render_layers(scene, raws, assets, editable_captions=editable_captions)
+        cover = Image.new("RGBA", (width, height))
+        for span in spans:
+            if span["startFrame"] <= 0 < span["endFrame"]:
+                with Image.open(assets / span["name"]) as layer:
+                    cover = Image.alpha_composite(cover, layer.convert("RGBA"))
+        cover.convert("RGB").save(output / "cover.jpg", quality=90)
+        from compact_bcut_layers import compact_layers
+        spans = compact_layers(spans, scene, assets)
+        layer_indices = {}
+        for span in spans:
+            layer = span["layer"]
+            if layer not in layer_indices:
+                layer_indices[layer] = len(layer_indices)
+            image(span["name"], ms(span["startFrame"]), ms(span["endFrame"]),
+                  layer_indices[layer], span["label"])
+        for index, event in enumerate(effect_audio_events(scene)):
+            audio(event["src"], ms(event["startFrame"]), ms(event["endFrame"]),
+                  5 + index, event["volume"], trim_in=ms(event["trimInFrames"]))
+        if editable_captions:
+            for shot in shots:
+                for line in ([] if spy else shot.get("lines", [])):
+                    start = max(line["from"], intro.get("durationInFrames", 0))
+                    end = min(line["from"] + line["durationInFrames"],
+                              shot["from"] + shot["durationInFrames"])
+                    # Bcut's transform positions the text box by its center.
+                    # Approximate CJK advance to retain the production left edge.
+                    native_dialogue(line["text"], start, end)
+                prompt = (shot.get("choices") or {}).get("prompt")
+                if prompt:
+                    start = max(shot["from"], intro.get("durationInFrames", 0))
+                    end = shot["from"] + shot["durationInFrames"]
+                    occupied = [{"from": line["from"], "durationInFrames": line["durationInFrames"]}
+                                for line in shot.get("lines", [])]
+                    for a, b in audible_spans(start, end, occupied):
+                        if spy and ep.get("style", {}).get("caption_style", "ba") == "meme":
+                            text = prompt.replace("。", "")
+                            size = meme_size(text, .098, .84)
+                            speaker = (shot.get("lines") or [{}])[-1].get("speaker")
+                            color = scene["characters"].get(speaker, {}).get("color", "#ffffff")
+                            caption(text, ms(a), ms(b), y=caption_y_bottom(.06, size),
+                                    scale=caption_scale(size), color=color, outline=color, rotation=-1.2)
+                        else:
+                            native_dialogue(prompt, a, b)
     bgm = scene.get("bgm")
     if bgm:
         mutes = bgm.get("muteRanges") if spy else None
@@ -404,7 +501,7 @@ def build(scene, raws, output):
             fade_in = bgm.get("fadeInFrames", 45) if span_start == 0 else resume
             fade_out = bgm.get("fadeOutFrames", 75) if span_end == ep["durationInFrames"] else 0
             audio(bgm["src"], ms(span_start), ms(span_end), 1, bgm.get("volume", .15),
-                  bgm.get("loop", True), ms(fade_in), ms(fade_out))
+                  bgm.get("loop", True), ms(fade_in), ms(fade_out), trim_in=ms(span_start))
         if spy:
             for cue in bgm.get("cues") or []:
                 audio(cue["src"], ms(cue["from"]), ms(cue["from"] + cue["durationInFrames"]),
@@ -412,17 +509,41 @@ def build(scene, raws, output):
     for key, clip_key in (("videoTracks", "clips"), ("audioTracks", "audioClips"), ("captionTracks", "captions")):
         kept = [item for item in tl[key] if item[clip_key]]
         for index, item in enumerate(kept):
-            item["index"] = index
+            # Video and caption tracks share the visual stacking index. Giving
+            # both index 0 places the subtitles underneath opaque backgrounds.
+            item["index"] = index + (len(tl["videoTracks"]) if key == "captionTracks" else 0)
         tl[key] = kept
         for item in tl[key]:
             item[clip_key].sort(key=lambda clip: (clip["inPoint"], clip["outPoint"]))
+    if visual_layers and editable_captions and not spy:
+        controls = {"ui", "choices", "buttons", "chrome", "click", "intro"}
+        # Composite transition clips omit native text and must remain below it.
+        tl["videoTracks"].sort(key=lambda tr: (
+            tr["clips"][0]["assetInfo"]["displayName"] in controls, tr["index"]))
+        for index, tr in enumerate(tl["videoTracks"]):
+            tr["index"] = index
+        insertion = next((tr["index"] for tr in tl["videoTracks"]
+                          if tr["clips"][0]["assetInfo"]["displayName"] in controls), len(tl["videoTracks"]))
+        for tr in tl["videoTracks"]:
+            if tr["index"] >= insertion:
+                tr["index"] += len(tl["captionTracks"])
+        for offset, tr in enumerate(tl["captionTracks"]):
+            tr["index"] = insertion + offset
     draft["timelineWidget"]["tracking"]["tracks"].update(
         video_tracks=len(tl["videoTracks"]), audio_tracks=len(tl["audioTracks"]),
-        video_count=sum(len(t["clips"]) for t in tl["videoTracks"]),
-        pic_count=sum(len(t["clips"]) for t in tl["videoTracks"]),
+        video_count=sum(c.get("mediaType") == 0 for t in tl["videoTracks"] for c in t["clips"]),
+        pic_count=sum(c.get("mediaType") == 1 for t in tl["videoTracks"] for c in t["clips"]),
         subtitles=";".join(c["uid"] for t in tl["captionTracks"] for c in t["captions"]))
+    if visual_layers:
+        used = {clip["sourcePath"].removeprefix(TOKEN)
+                for key, clips in (("videoTracks", "clips"), ("audioTracks", "audioClips"))
+                for tr in tl[key] for clip in tr[clips]}
+        for path in assets.iterdir():
+            if path.name not in used:
+                path.unlink()
     lib.write_json(output / "draft.bjson", draft)
     lib.write_json(output / "manifest.json", {"name": ep["title"], "duration_ms": end_ms,
+                                               "visual_mode": "production-layers" if visual_layers else "static",
                                                "warnings": warnings, "format": "ba-bcut-1"})
     shutil.copyfile(Path(__file__).with_name("install_bcut.py"), output / "install_bcut.py")
     shutil.copyfile(lib.ROOT / "licenses/dsh-bcut-edit-MIT.txt", output / "LICENSE-templates.txt")
@@ -431,15 +552,17 @@ def build(scene, raws, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--episode", required=True)
+    parser.add_argument("--captions", choices=("rendered", "editable"), default="rendered")
     args = parser.parse_args()
-    episode = lib.resolve_episode(args.episode)
+    episode = lib.resolve_episode(args.episode, lock=True)
     destination = episode / "output" / f"bcut-{uuid.uuid4().hex[:8]}"
     destination.parent.mkdir(exist_ok=True)
     tmp = Path(tempfile.mkdtemp(dir=destination.parent))
     try:
-        build(lib.load_json(episode / "project/scene.json"), episode / "raws", tmp)
+        build(lib.load_json(episode / "project/scene.json"), episode / "raws", tmp,
+              visual_layers=True, editable_captions=args.captions == "editable")
         tmp.rename(destination)
-    except Exception:
+    except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
     print(f"Bcut bundle: {destination}")

@@ -10,6 +10,7 @@ from PIL import Image
 
 import export_bcut
 import install_bcut
+from render_bcut_layers import effect_audio_events, render_layers, layer_frame_ranges, render_jobs, default_layers
 
 
 class BcutTests(unittest.TestCase):
@@ -17,6 +18,9 @@ class BcutTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
+        # A format fixture, not a real font: installation only resolves its path.
+        self.font = self.root / "test-font.ttf"
+        self.font.write_bytes(b"font-path-fixture")
         self.raws = self.root / "raws"
         self.raws.mkdir()
         Image.new("RGB", (200, 100), "blue").save(self.raws / "bg.png")
@@ -39,6 +43,9 @@ class BcutTests(unittest.TestCase):
         self.bundle = self.root / "bundle"
         self.bundle.mkdir()
 
+    def install(self, root):
+        return install_bcut.install(self.bundle, root, font_path=self.font)
+
     def build(self):
         export_bcut.build(self.scene, self.raws, self.bundle)
         return json.loads((self.bundle / "draft.bjson").read_text())
@@ -58,6 +65,111 @@ class BcutTests(unittest.TestCase):
                          [(0, 1000), (1000, 2000), (2000, 3000)])
         self.assertAlmostEqual(music[0]["fxs"][0]["gainValue"], -6.0206, places=4)
 
+    def test_image_clips_have_no_undefined_crop(self):
+        draft = self.build()
+        tracks = draft["timelineWidget"]["timeline"]["videoTracks"]
+        for track in tracks:
+            for clip in track["clips"]:
+                self.assertFalse(any(fx.get("businessType") == 2 for fx in clip["fxs"]))
+                self.assertEqual(clip["propertyFxList"], [])
+
+    def test_caption_indices_stack_above_every_video_track(self):
+        self.scene["episode"]["template"] = "who-is-the-spy"
+        self.scene["shots"][0]["characters"][0]["label"] = {"text": "Word"}
+        self.scene["shots"][0]["voteTags"] = [{"speaker": "c", "text": "Vote"}]
+        timeline = self.build()["timelineWidget"]["timeline"]
+        video_indices = [track["index"] for track in timeline["videoTracks"]]
+        caption_indices = [track["index"] for track in timeline["captionTracks"]]
+        self.assertEqual(len(set(video_indices + caption_indices)),
+                         len(video_indices) + len(caption_indices))
+        self.assertGreater(min(caption_indices), max(video_indices))
+
+    def test_effect_sounds_match_intro_visibility_and_clip_boundaries(self):
+        self.scene["intro"] = {"durationInFrames": 20}
+        self.scene["ui"] = {"sfx": {"click": "click.wav", "hover": "hover.wav",
+                                     "select": "select.wav"}}
+        shot = self.scene["shots"][0]
+        shot["characters"][0]["bubbles"] = [
+            {"name": "Shy", "startFrame": 5, "audio": "bubble.wav"},
+            {"name": "Dot", "startFrame": 10, "audio": "disabled.wav", "sound": False}]
+        shot["buttons"] = [{"pressFrame": 18}]
+        shot["choices"] = {"options": ["yes"], "fromFrame": 10,
+                           "selectFrame": 30, "hideFrame": 35}
+        expected = [("click.wav", 22, 32, 0, .3),
+                    ("bubble.wav", 5, 90, 0, .5),
+                    ("click.wav", 20, 30, 2, .55),
+                    ("select.wav", 30, 35, 0, .65)]
+        for template in ("official", "who-is-the-spy"):
+            with self.subTest(template=template):
+                self.scene["episode"]["template"] = template
+                events = effect_audio_events(self.scene)
+                self.assertEqual([(event["src"], event["startFrame"], event["endFrame"],
+                                   event["trimInFrames"], event["volume"]) for event in events], expected)
+
+    def test_editable_spy_omits_rendered_text_layers(self):
+        self.scene["episode"]["template"] = "who-is-the-spy"
+        layers = default_layers(self.scene, editable_captions=True)
+        self.assertIn("dialogue-ba", layers)
+        self.assertIn("buttons", layers)
+        self.assertFalse(set(layers) & {"word-labels", "votes", "thought", "meme"})
+
+    def test_visual_layers_match_css_stacking_contexts(self):
+        layers = default_layers(self.scene)
+        self.assertLess(layers.index("dialogue-full"), layers.index("choices"))
+        self.assertLess(layers.index("choices"), layers.index("buttons"))
+        self.assertLess(layers.index("buttons"), layers.index("chrome"))
+        self.scene["episode"]["template"] = "who-is-the-spy"
+        layers = default_layers(self.scene)
+        self.assertLess(layers.index("word-labels"), layers.index("choices"))
+        self.assertLess(layers.index("votes"), layers.index("buttons"))
+        self.assertLess(layers.index("buttons"), layers.index("thought"))
+        self.assertLess(layers.index("meme"), layers.index("chrome"))
+
+    def test_render_ranges_skip_only_unmounted_components(self):
+        self.scene["intro"] = {"durationInFrames": 20}
+        ranges = layer_frame_ranges(self.scene,
+            ["background", "character-slot:0", "character-slot:1", "ui", "dialogue-full", "intro"],
+            [(30, 35)])
+        self.assertEqual(ranges["background"], [[0, 30], [35, 90]])
+        self.assertEqual(ranges["character-slot:0"], ranges["background"])
+        self.assertEqual(ranges["character-slot:1"], [])
+        self.assertEqual(ranges["ui"], [[20, 30], [35, 90]])
+        self.assertEqual(ranges["dialogue-full"], [[20, 30], [35, 50]])
+        self.assertEqual(ranges["intro"], [[0, 20]])
+
+    def test_spy_thought_mounts_before_intro_and_word_label_leaves_with_motion(self):
+        self.scene["episode"].update(template="who-is-the-spy", style={"caption_style": "meme"})
+        self.scene["intro"] = {"durationInFrames": 20}
+        shot = self.scene["shots"][0]
+        shot["lines"][0]["kind"] = "thought"
+        shot["characters"][0].update(label={"text": "Word"}, motion={"startFrame": 12})
+        ranges = layer_frame_ranges(self.scene, ["ui", "dialogue-full", "labels"])
+        self.assertEqual(ranges["ui"], [])
+        self.assertEqual(ranges["dialogue-full"], [[10, 50]])
+        self.assertEqual(ranges["labels"], [[0, 12]])
+
+    def test_character_state_reuse_keeps_entrance_and_motion_dynamic(self):
+        shot = self.scene["shots"][0]
+        jobs = render_jobs(self.scene, ["character-slot:0"])
+        static = [job for job in jobs if "staticKey" in job]
+        self.assertTrue(static)
+        self.assertTrue(all(job["start"] >= 30 for job in static))
+        self.assertEqual(len({job["staticKey"] for job in static}), 1)
+        for field, value in (("motion", {"startFrame": 60}), ("turns", [{"startFrame": 60}]),
+                             ("actions", [{"name": "jump"}]), ("bubbles", [{"name": "Shy"}])):
+            with self.subTest(field=field):
+                shot["characters"][0][field] = value
+                self.assertFalse(any("staticKey" in job for job in render_jobs(self.scene, ["character-slot:0"])))
+                del shot["characters"][0][field]
+
+    def test_background_reuse_changes_with_speaker_position(self):
+        shot = self.scene["shots"][0]
+        shot["characters"][0]["x"] = .2
+        jobs = render_jobs(self.scene, ["background"])
+        self.assertEqual([(job["start"], job["end"]) for job in jobs], [(0, 10), (10, 50), (50, 90)])
+        self.assertEqual(jobs[0]["staticKey"], jobs[2]["staticKey"])
+        self.assertNotEqual(jobs[0]["staticKey"], jobs[1]["staticKey"])
+
     def test_install_preserves_index_and_relocates(self):
         self.build()
         root = self.root / "Drafts"
@@ -65,8 +177,8 @@ class BcutTests(unittest.TestCase):
         index = root / "draftInfo.json"
         original = b'{"extra": 42, "draftInfos": [{"id": "old", "name": "Keep"}]}'
         index.write_bytes(original)
-        first = install_bcut.install(self.bundle, root)
-        second = install_bcut.install(self.bundle, root)
+        first = self.install(root)
+        second = self.install(root)
         self.assertNotEqual(first, second)
         info = json.loads(index.read_text())
         self.assertEqual(info["extra"], 42)
@@ -76,6 +188,10 @@ class BcutTests(unittest.TestCase):
         self.assertIn(original, [p.read_bytes() for p in root.glob("*.bak")])
         data = json.loads(next(first.glob("*.bjson")).read_text())
         self.assertNotIn("__BA_ASSETS__", json.dumps(data))
+        self.assertNotIn("__BCUT_FONT__", json.dumps(data))
+        caption = data["timelineWidget"]["timeline"]["captionTracks"][0]["captions"][0]
+        self.assertEqual(caption["defaultFontPath"], self.font.resolve().as_posix())
+        self.assertEqual(caption["assetInfo"]["fontSrcPath"], self.font.resolve().as_posix())
         for tr in data["timelineWidget"]["timeline"]["videoTracks"]:
             for clip in tr["clips"]:
                 self.assertTrue(Path(clip["sourcePath"]).is_file())
@@ -87,7 +203,7 @@ class BcutTests(unittest.TestCase):
         index = root / "draftInfo.json"
         index.write_text("broken")
         with self.assertRaises(ValueError):
-            install_bcut.install(self.bundle, root)
+            self.install(root)
         self.assertEqual(index.read_text(), "broken")
         self.assertEqual(list(root.iterdir()), [index])
 
@@ -97,7 +213,7 @@ class BcutTests(unittest.TestCase):
         root.mkdir()
         (root / ".ba-import.lock").touch()
         with self.assertRaises(FileExistsError):
-            install_bcut.install(self.bundle, root)
+            self.install(root)
 
     def test_missing_asset_fails_before_install_changes(self):
         self.build()
@@ -105,7 +221,7 @@ class BcutTests(unittest.TestCase):
             path.unlink()
         root = self.root / "Drafts"
         with self.assertRaises(ValueError):
-            install_bcut.install(self.bundle, root)
+            self.install(root)
         self.assertEqual(list(root.iterdir()), [])
 
     def test_expression_returns_to_standing_face(self):
@@ -186,6 +302,18 @@ class BcutTests(unittest.TestCase):
         self.assertEqual([(c["inPoint"], c["outPoint"]) for c in music], [(0, 1000), (2000, 3000)])
         self.assertEqual([(c["inPoint"], c["outPoint"]) for c in tl["audioTracks"][3]["audioClips"]],
                          [(1000, 2000)])
+
+    def test_music_continues_source_after_mute(self):
+        with wave.open(str(self.raws / "music.wav"), "wb") as audio:
+            audio.setparams((1, 2, 48000, 0, "NONE", "not compressed"))
+            audio.writeframes(b"\0\0" * 48000 * 4)
+        self.scene["episode"]["template"] = "who-is-the-spy"
+        self.scene["bgm"] = {"src": "music.wav", "loop": True,
+                             "muteRanges": [{"from": 30, "durationInFrames": 30}]}
+        timeline = self.build()["timelineWidget"]["timeline"]
+        clips = timeline["audioTracks"][1]["audioClips"]
+        self.assertEqual([(c["inPoint"], c["trimIn"], c["trimOut"]) for c in clips],
+                         [(0, 0, 1000), (2000, 2000, 3000)])
 
 
 if __name__ == "__main__":

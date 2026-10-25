@@ -15,6 +15,8 @@ import {
   staticFile,
   useCurrentFrame,
   useVideoConfig,
+  delayRender,
+  continueRender,
 } from 'remotion';
 import {linearTiming, TransitionSeries} from '@remotion/transitions';
 import type {TransitionPresentation} from '@remotion/transitions';
@@ -167,6 +169,9 @@ type Shot = {
 
 type Scene = {
   schema_version: number;
+  /** Internal export selector; omitted for ordinary renders. */
+  bcutLayer?: string;
+  bcutHideDialogueText?: boolean;
   episode: {
     id: string;
     title: string;
@@ -367,6 +372,14 @@ const SceneBackdrop: React.FC<{ shot: Shot }> = ({ shot }) => {
 
 // ── Characters ──────────────────────────────────────────────────────────────
 
+// Image decoding can resolve before Chromium commits its composited texture.
+// Wait through paint before releasing the screenshot frame, especially when an
+// expression replaces the image while several layer render pages run together.
+const waitForSpritePaint = () => {
+  const handle = delayRender('Waiting for decoded sprite paint');
+  requestAnimationFrame(() => requestAnimationFrame(() => continueRender(handle)));
+};
+
 const CharacterFigure: React.FC<{
   entry: Shot['characters'][number];
   data: CharacterData;
@@ -500,7 +513,7 @@ const CharacterFigure: React.FC<{
           opacity: (entry.entrance === 'fade-in' ? entrance : 1) * action.opacity,
         }}
       >
-        <Img src={staticFile(sprite)} style={{height: '100%', width: 'auto', display: 'block', filter: isDimmed
+        <Img key={sprite} onImageFrame={waitForSpritePaint} src={staticFile(sprite)} style={{height: '100%', width: 'auto', display: 'block', filter: isDimmed
           ? 'brightness(0.66) saturate(0.82) drop-shadow(0 10px 22px rgba(20,30,45,0.20))'
           : 'drop-shadow(0 16px 30px rgba(20,30,45,0.22))'}} />
       {(entry.bubbles ?? []).map((cue, index) => {
@@ -787,7 +800,8 @@ const DialogueBox: React.FC<{
   character?: CharacterData;
   prompt?: boolean;
   lineFrame: number;
-}> = ({ speaker, text, character, prompt, lineFrame }) => {
+  hideText?: boolean;
+}> = ({ speaker, text, character, prompt, lineFrame, hideText }) => {
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
   const appear = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 10 });
@@ -889,7 +903,7 @@ const DialogueBox: React.FC<{
           textShadow: '0 2px 10px rgba(0,0,0,0.7)',
         }}
       >
-        {glyphs.slice(0, visibleGlyphs).join('')}
+        {hideText ? null : glyphs.slice(0, visibleGlyphs).join('')}
       </div>
 
       {/* 右下闪烁的青色三角：台词打完才出现，提示可以继续 */}
@@ -1181,6 +1195,8 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
 }) => {
   const frame = useCurrentFrame();
   const showUi = shot.from + frame >= uiStartFrame;
+  const layer = scene.bcutLayer;
+  const visible = (name: string) => !layer || layer === name;
 
   const activeLine = shot.lines.find(
     (line) =>
@@ -1208,14 +1224,14 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
 
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
-      <SceneBackdrop shot={shot} />
+      {visible('background') ? <SceneBackdrop shot={shot} /> : null}
       <AbsoluteFill>
-        <AbsoluteFill
+        {visible('background') ? <AbsoluteFill
           style={{
             background: `radial-gradient(circle at ${speakingX * 100}% 46%, rgba(255,255,255,0.16), rgba(255,255,255,0) 52%)`,
           }}
-        />
-        {shot.characters.map((entry) => (
+        /> : null}
+        {shot.characters.map((entry, slot) => visible(`character-slot:${slot}`) || layer === `character:${entry.id}` ? (
           <CharacterFigure
             key={`${shot.id}-${entry.id}`}
             entry={entry}
@@ -1225,31 +1241,33 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
             shadowColor="rgba(20,30,45,0.22)"
             shotDuration={shot.durationInFrames}
           />
-        ))}
+        ) : null)}
       </AbsoluteFill>
 
       {showUi ? (
         <>
-          <StoryChrome />
+          {(visible('ui') || visible('chrome')) ? <StoryChrome /> : null}
 
-          {shot.buttons?.map((btn, index) => (
+          {(visible('ui') || visible('buttons')) ? shot.buttons?.map((btn, index) => (
             <BAButton key={`${shot.id}-btn-${index}`} btn={btn} sfx={scene.ui?.sfx?.click} />
-          ))}
+          )) : null}
 
-          {shot.choices?.options?.length ? (
+          {(visible('ui') || visible('choices')) && shot.choices?.options?.length ? (
             <ChoiceBox choices={shot.choices} sfx={scene.ui?.sfx} />
           ) : null}
 
-          {activeLine ? (
+          {(visible('dialogue') || visible('dialogue-full')) && activeLine ? (
             <DialogueBox
+              hideText={layer === 'dialogue' || scene.bcutHideDialogueText}
               key={activeLine.id}
               speaker={activeLine.speaker}
               text={activeLine.text}
               character={scene.characters[activeLine.speaker]}
               lineFrame={frame - (activeLine.from - shot.from)}
             />
-          ) : shot.choices?.prompt ? (
+          ) : (visible('dialogue') || visible('dialogue-full')) && shot.choices?.prompt ? (
             <DialogueBox
+              hideText={layer === 'dialogue' || scene.bcutHideDialogueText}
               key={`${shot.id}-prompt`}
               speaker={promptSpeaker}
               text={shot.choices.prompt}
@@ -1274,7 +1292,7 @@ const BAEpisode: React.FC<Scene> = (scene) => {
   const bgm = scene.bgm;
 
   return (
-    <AbsoluteFill style={{ background: '#101820', fontFamily, color: '#253844' }}>
+    <AbsoluteFill style={{ background: !scene.bcutLayer || scene.bcutLayer === 'background' ? '#101820' : 'transparent', fontFamily, color: '#253844' }}>
       {bgm ? (
         <Audio
           src={staticFile(bgm.src)}
@@ -1340,7 +1358,7 @@ const BAEpisode: React.FC<Scene> = (scene) => {
         )),
       )}
 
-      {scene.intro ? <Intro intro={scene.intro} scene={scene} /> : null}
+      {scene.intro && (!scene.bcutLayer || scene.bcutLayer === 'intro') ? <Intro intro={scene.intro} scene={scene} /> : null}
     </AbsoluteFill>
   );
 };
