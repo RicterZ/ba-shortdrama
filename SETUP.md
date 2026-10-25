@@ -93,8 +93,9 @@ Agent 在新 checkout 上第一次生成语音（`ep:prepare`、`npm run voice -
 
 1. 用户选了付费 provider：请用户提供 key，Agent 写入 `local/.env` 并 `chmod 600 local/.env`。不要把 key 写进命令行参数、提交、日志或 issue 评论；回复里只说"已写入"，不要回显 key。用户想自己填时，告诉他变量名，等他确认填好再继续。
 2. 角色 profile 的 `voice.provider`、`voice.voice_id`、`voice.api_key_env` 要和所选 provider 一致；不同服务的音色 ID 不通用，缺 `voice_id` 时向用户要，不要猜。`gpt-sovits` 不使用 `voice_id`，而使用参考音频及语言字段。
-3. 运行 `npm run voice -- check` 确认 key 和音色可用，通过后再生成。
-4. 用户不选，或者暂时没有 key：使用 profile 里的 `voice.fallback`（通常是 `edge-tts`），生成时显式加 `--voice-fallback`（`prepare.py`）或 `--fallback`（`voice.py`），并告诉用户当前音频来自 fallback 声线，之后换回正式 provider 时要重新合成，不能带 `--reuse-audio`。
+3. 用户选 `gpt-sovits`：先请用户按角色填写或确认 `base_url`（本机默认地址也需确认）、`ref_audio_path`、`text_lang`、`prompt_lang`、`prompt_text`（参考音频准确转写；留空须用户确认）。说明参考路径属于服务端；询问各角色共用模型还是使用独立模型，独立模型需提供各自服务地址。可选项 `speed` 默认 1.0、`text_split_method` 默认 `cut5`。缺少必填配置时停止并询问，不猜路径、语言、转写或模型，不擅自换成其他 provider。完整示例见下文「GPT-SoVITS（自托管）」。
+4. 运行 `npm run voice -- check` 检查配置；对 GPT-SoVITS 这一步不联网，不能证明模型可用。用户确认配置后，运行 `npm run voice -- check --character <角色id> --synthesize` 做真实试音，并请用户确认声线，再生成整集。
+5. 用户不选，或者暂时没有 key：使用 profile 里的 `voice.fallback`（通常是 `edge-tts`），生成时显式加 `--voice-fallback`（`prepare.py`）或 `--fallback`（`voice.py`），并告诉用户当前音频来自 fallback 声线，之后换回正式 provider 时要重新合成，不能带 `--reuse-audio`。已选 GPT-SoVITS 但配置不全时，应先等待补齐，不适用此默认 fallback 流程。
 
 用户已经做过选择、`local/.env` 里已有对应 key 时，不必重复询问。
 

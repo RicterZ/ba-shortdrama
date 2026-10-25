@@ -267,6 +267,10 @@ bgm:
 
 语音有单独的入口 `scripts/voice.py`（`npm run voice -- ...`），`prepare.py` 内部也调用它，不需要再写临时脚本：
 
+**首次配音前先确认 provider**，按 `SETUP.md`「语音 provider 选择」执行。若用户选 GPT-SoVITS，必须请用户按角色填写或确认服务地址 `base_url`、服务端参考音频路径 `ref_audio_path`、目标语言 `text_lang`、参考语言 `prompt_lang` 和参考转写 `prompt_text`（留空须确认），写入各自 `profile.yaml` 的 `voice`；不要猜测这些值。确认共用模型还是每角色独立模型；独立模型分别提供服务地址，当前不会自动切换权重。可选 `speed` / `text_split_method` 默认 1.0 / `cut5`。缺少必填配置时先询问并等待，不直接配音或擅自 fallback。配置示例及服务启动方式见 `SETUP.md`「GPT-SoVITS（自托管）」。
+
+GPT-SoVITS 的 `check` 只校验本地配置；配置齐全且用户确认后，运行 `npm run voice -- check --character <角色id> --synthesize` 真实试音，用户确认声线后再生成整集。更换模型或参考音频后须重新生成对应台词，不带 `--reuse` / `--reuse-audio`。
+
 ```sh
 cd code/ba-production
 
@@ -290,7 +294,7 @@ npm run voice -- episode --episode 003-game-dev-sneak --only L7 --timeout 180
 npm run voice -- episode --episode 003-game-dev-sneak --fallback
 ```
 
-`voice.py` 负责 provider、重试、首尾静音裁剪和错误码输出；`episode` 只写 `audio/<shot.id>-<line.id>.mp3`（例如 `S1-L1.mp3`、`S2-L4.mp3`），时间轴仍由 prepare 重建。Vocu 整集默认走异步多句接口（`--sync` 可强制逐句同步），`check` 默认只做音色查询、不触发合成。三个 provider 都从各自 profile 的 `voice` 读取，`vocu` 的主机是 `https://v1.wusound.cn`。
+`voice.py` 负责 provider、重试、首尾静音裁剪和错误码输出；`episode` 只写 `audio/<shot.id>-<line.id>.mp3`（例如 `S1-L1.mp3`、`S2-L4.mp3`），时间轴仍由 prepare 重建。Vocu 整集默认走异步多句接口（`--sync` 可强制逐句同步），`check` 默认不触发合成（只有 Vocu 做音色在线查询）。四个 provider 都从各自 profile 的 `voice` 读取，`vocu` 的主机是 `https://v1.wusound.cn`；`gpt-sovits` 逐句同步请求角色配置的服务，传参考音频区分声线，返回 WAV 后转成 MP3。
 
 对白命名和旧录音复用：
 
