@@ -49,3 +49,13 @@ image-down coordinates. Character art and bubbles share a transformed parent,
 so translation, scaling, rotation, facing and visibility are inherited.
 The per-preset offsets and scale values are taken from `emotionOptions.ts`.
 Think still has no upstream parameters and retains explicitly custom settings.
+## Bcut draft templates
+
+`code/ba-production/scripts/bcut_templates/*.json` are copied from
+LQH-A-A-O/dsh-bcut-edit, revision `8cbd464976aa8babe2c88312eb915e4a15e3680a`,
+`home/skills/bcut-edit/templates`. Copyright (c) 2026 涟崎桦, MIT.
+Source: https://github.com/LQH-A-A-O/dsh-bcut-edit
+Full license: `licenses/dsh-bcut-edit-MIT.txt`.
+The exporter uses the project's documented field structure; application
+compatibility is experimental and is not endorsed by Bilibili.
+

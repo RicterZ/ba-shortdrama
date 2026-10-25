@@ -349,6 +349,26 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 
 排查慢渲染时保留完整进度和退出码，记录实际 profile、输出规格和总耗时。
 
+### 导出到必剪
+
+`prepare` 之后可以把这一集写成必剪草稿，在必剪里改轨道、字幕、配音、BGM 和立绘。
+
+```sh
+EPISODE=003-game-dev-sneak npm run ep:bcut
+```
+
+产物在 `videos/<episode>/output/bcut-<id>/`：`draft.bjson`、`assets/`、`cover.jpg`、`install_bcut.py`、`manifest.json`。必剪完全退出后，进入这个目录执行：
+
+```sh
+python install_bcut.py --bcut-closed
+```
+
+Windows 默认写入 `~/Documents/Bcut Drafts`，macOS 默认写入 `~/Movies/Bcut Drafts`。必剪偏好设置里的草稿目录若不是这个，加上 `--draft-root`。安装只新建一个草稿，并给原来的 `draftInfo.json` 留一份备份。
+
+草稿按必剪 3.10.3 的明文 JSON 写成，字段结构来自 MIT 项目 dsh-bcut-edit，见 `THIRD_PARTY_NOTICES.md`。背景在最底下一轨，每个角色单独一轨。立绘按分镜位置做成透明底全画布图：说话时换成该句表情，说完回到镜头常驻脸，`holdEmotion` 和 `emotionCues` 照 `scene.json` 保留。配音、逐句点击音和 BGM 各占一条音频轨，字幕是可改文本。
+
+它不是成片的逐帧复刻。没有镜头运动、转场叠化、入场、走位、转身、气泡、压暗和界面按钮，片头只放标题。谁是卧底模板不会导出。相邻镜头如果带转场，必剪里改成硬切，避免两条轨道叠在同一时刻。本机未安装必剪，草稿还没有在应用里打开验证。
+
 ## 7. 审片与发布
 
 - 先看预览帧，再完整看片。`review.json` 记录看过的帧、是否完整听音、缺失项。
