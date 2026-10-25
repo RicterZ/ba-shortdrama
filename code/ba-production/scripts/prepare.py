@@ -754,12 +754,67 @@ def main() -> int:
         bgm_dir = raws / "audio"
         bgm_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(bgm_src, bgm_dir / bgm_src.name)
+
+        shot_index = {shot["id"]: index for index, shot in enumerate(shots)}
+
+        def bgm_range(from_id: str, to_id: str | None, at_line: str | None = None) -> tuple[int, int]:
+            if from_id not in shot_index:
+                raise SystemExit(f"bgm 引用了不存在的镜头：{from_id}")
+            target = to_id or from_id
+            if target not in shot_index:
+                raise SystemExit(f"bgm 引用了不存在的镜头：{target}")
+            first = shot_index[from_id]
+            last = shot_index[target]
+            if last < first:
+                raise SystemExit(f"bgm 的镜头范围反了：{from_id} → {target}")
+            start = int(shots[first]["from"])
+            if at_line:
+                anchor = next(
+                    (line for line in shots[first].get("lines") or [] if line["id"] == at_line),
+                    None,
+                )
+                if anchor is None:
+                    raise SystemExit(f"bgm 的 atLine={at_line!r} 不在镜头 {from_id} 中")
+                start = int(anchor["from"])
+            end = int(shots[last]["from"]) + int(shots[last]["durationInFrames"])
+            return start, end - start
+
+        mute_ranges = []
+        for item in bgm_cfg.get("mute") or []:
+            start, length = bgm_range(item["from"], item.get("to"), item.get("atLine"))
+            mute_ranges.append({"from": start, "durationInFrames": length})
+
+        cues = []
+        for item in bgm_cfg.get("cues") or []:
+            cue_file = item.get("file")
+            if not cue_file:
+                raise SystemExit("bgm.cues 缺少 file")
+            cue_src = (lib.ROOT / cue_file).resolve()
+            if not cue_src.is_file():
+                cue_src = (episode / cue_file).resolve()
+            if not cue_src.is_file():
+                raise SystemExit(f"bgm.cues 指向的音频不存在：{cue_file}")
+            shutil.copy2(cue_src, bgm_dir / cue_src.name)
+            start, length = bgm_range(item["from"], item.get("to"), item.get("atLine"))
+            cues.append(
+                {
+                    "from": start,
+                    "durationInFrames": length,
+                    "src": f"audio/{cue_src.name}",
+                    "volume": float(item.get("volume", 0.5)),
+                    "loop": bool(item.get("loop", True)),
+                }
+            )
+
         scene_bgm = {
             "src": f"audio/{bgm_src.name}",
             "volume": float(bgm_cfg.get("volume", 0.15)),
             "loop": bool(bgm_cfg.get("loop", True)),
             "fadeInFrames": int(bgm_cfg.get("fadeInFrames", 45)),
             "fadeOutFrames": int(bgm_cfg.get("fadeOutFrames", 75)),
+            "muteRanges": mute_ranges,
+            "cues": cues,
+            "resumeFadeFrames": int(bgm_cfg.get("resumeFadeFrames", 0)),
         }
 
     snapshot_shot_audio(shots, monologue_files, episode, raws)

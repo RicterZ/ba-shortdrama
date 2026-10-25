@@ -37,6 +37,23 @@ style:
 
 投票、聚光灯、心理字幕是**分开的镜头**：投票镜头只有 `voteTags` 和 `systemVoice`；心理镜头才写 `focus` 和 `monologue`。
 
+## BGM
+
+常驻曲在 `episode.yaml` 的 `bgm` 里；震惊段用 `mute` 静音，`cues` 叠加替换曲：
+
+```yaml
+bgm:
+  file: data/audio/bgm/0005-colorful-mess.ogg
+  volume: 0.13
+  mute:
+    - { from: S3, to: C3 }
+    - { from: S6, atLine: L21 }
+  cues:
+    - { from: S6, atLine: L21, file: data/audio/bgm/0007-unwelcome-school.ogg, volume: 0.5 }
+```
+
+`mute` 是硬静音，默认不做淡入淡出；`atLine` 可以把切点对齐到台词。`cues` 不会自动静音常驻 BGM，需要同时写 `mute`。
+
 ## 完整示例：西瓜和南瓜
 
 小桃、小绿、优香的词是「西瓜」，凯伊是「南瓜」。

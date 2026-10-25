@@ -154,6 +154,27 @@ publication_approved: false
 - 无台词镜头：`"lines": []` 加 `durationInFrames`。prepare 会在该镜头处插入等长静默，并把后面的台词整体后移；开场词牌、反应特写、沉默拍都这么写。末尾无台词镜头不再额外追加 `outro_frames`，以声明时长结束；转场 padding 仍按通用规则另计。
 - 发言镜头保持全彩、静态镜头；`focus` 只负责内心/反应镜头的压暗和柔光。
 
+#### BGM 切换
+
+`episode.yaml` 的 `bgm` 是常驻官方 BGM；`mute` 按镜头区间静音，`cues` 叠加替换曲：
+
+```yaml
+bgm:
+  file: data/audio/bgm/0005-colorful-mess.ogg
+  volume: 0.13
+  mute:
+    - { from: S3, to: C3 }          # 震惊段：官方 BGM 静音
+    - { from: S6, atLine: L21 }     # 凯伊跑走：静音到本镜结束
+  cues:
+    - { from: S6, atLine: L21, file: data/audio/bgm/0007-unwelcome-school.ogg, volume: 0.5 }
+```
+
+- `from` / `to` 是镜头 id；`to` 省略时等于 `from`，范围含 `to` 镜头结尾。
+- `atLine` 可选，把起点对齐到该镜头内某句台词。
+- `mute` 是硬静音；`resumeFadeFrames` 可以给恢复加淡入（默认 0，即不做淡入淡出）。
+- `cues` 不会自动静音常驻 BGM，需要同时写 `mute`。
+- 路径相对工作区或本集目录，prepare 会复制进 `raws/audio`。
+
 ```json
 {
   "id": "C1",

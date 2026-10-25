@@ -210,6 +210,17 @@ type Scene = {
     loop?: boolean;
     fadeInFrames?: number;
     fadeOutFrames?: number;
+    /** Base track is silent inside these absolute frame ranges. */
+    muteRanges?: Array<{ from: number; durationInFrames: number }>;
+    /** Replacement tracks (e.g. a shock cue) layered on top. */
+    cues?: Array<{
+      from: number;
+      durationInFrames: number;
+      src: string;
+      volume?: number;
+      loop?: boolean;
+    }>;
+    resumeFadeFrames?: number;
   } | null;
   shots: Shot[];
 };
@@ -1597,10 +1608,33 @@ const BAEpisode: React.FC<Scene> = (scene) => {
             const fadeOut = bgm.fadeOutFrames ?? 75;
             const head = fadeIn > 0 ? Math.min(1, f / fadeIn) : 1;
             const tail = fadeOut > 0 ? Math.min(1, Math.max(0, total - f) / fadeOut) : 1;
-            return base * Math.max(0, Math.min(head, tail));
+            const level = base * Math.max(0, Math.min(head, tail));
+            for (const range of bgm.muteRanges ?? []) {
+              const end = range.from + range.durationInFrames;
+              if (f >= range.from && f < end) return 0;
+              const resume = bgm.resumeFadeFrames ?? 0;
+              if (resume > 0 && f >= end && f < end + resume) {
+                return level * ((f - end) / resume);
+              }
+            }
+            return level;
           }}
         />
       ) : null}
+
+      {bgm?.cues?.map((cue) => (
+        <Sequence
+          key={`bgm-cue-${cue.from}`}
+          from={cue.from}
+          durationInFrames={cue.durationInFrames}
+        >
+          <Audio
+            src={staticFile(cue.src)}
+            loop={cue.loop !== false}
+            volume={cue.volume ?? 0.5}
+          />
+        </Sequence>
+      ))}
 
       <TransitionSeries>
         {scene.shots.flatMap((shot, index) => {
