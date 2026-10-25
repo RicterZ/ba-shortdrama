@@ -7,6 +7,7 @@ import os
 import re
 from pathlib import Path
 
+import av
 import yaml
 
 
@@ -376,32 +377,28 @@ def spoken_text(line: dict) -> str:
 
 
 def probe_duration(path: Path) -> float:
-    import subprocess
-
-    out = subprocess.check_output(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=nw=1:nk=1",
-            str(path),
-        ],
-        text=True,
-    )
-    return float(out.strip())
+    return float(probe_media(path)["format"]["duration"])
 
 
 def probe_media(path: Path) -> dict:
-    import subprocess
-
-    out = subprocess.check_output(
-        ["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)],
-        text=True,
-    )
-    return json.loads(out)
+    """Return the duration and stream kinds consumed by render/validate."""
+    with av.open(str(path)) as container:
+        duration = container.duration
+        if duration is not None:
+            seconds = duration / av.time_base
+        else:
+            durations = [
+                float(stream.duration * stream.time_base)
+                for stream in container.streams
+                if stream.duration is not None and stream.time_base is not None
+            ]
+            if not durations:
+                raise ValueError(f"Media has no duration: {path}")
+            seconds = max(durations)
+        return {
+            "format": {"duration": seconds},
+            "streams": [{"codec_type": stream.type} for stream in container.streams],
+        }
 
 
 def voice_rate(value: float) -> str:

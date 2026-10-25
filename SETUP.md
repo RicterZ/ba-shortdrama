@@ -14,7 +14,7 @@ git submodule update --init
 
 - macOS（本项目在 macOS 上验证；Linux 未测试）
 - Node.js 18+
-- ffmpeg / ffprobe
+- PyAV（`av`，由 `uv sync` 安装）：Python 的媒体探测和语音裁剪直接调用 FFmpeg 库，不需要系统 `ffmpeg` / `ffprobe` 命令
 - Google Chrome：`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
 - [uv](https://docs.astral.sh/uv/)
 - `code/ba-production/node_modules`：Remotion 4.0.417、React 19，在该目录下 `npm ci` 安装
@@ -32,6 +32,8 @@ Python 依赖由仓库根目录的 `pyproject.toml` / `uv.lock` 统一声明，�
 ```sh
 uv sync
 ```
+
+PyAV 在有预编译 wheel 的 Windows/Linux/macOS 平台随包提供 FFmpeg 库，不把 binary 放进 Git；没有匹配 wheel 的平台需要自行准备编译依赖。Remotion 渲染的原生依赖仍由 npm 管理，整个项目目前只在 macOS 验证。`WORKFLOW.md` 中手动调用 `ffmpeg` 切片的可选命令仍需另行安装 FFmpeg。
 
 ## 资源与产物
 
