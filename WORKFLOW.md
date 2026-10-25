@@ -358,3 +358,73 @@ final 只放大画幅，不做 60fps 转换；不要通过改 fps 数字来变�
 目前只有优香标准立绘的 `Dot` 根据用户实机截图完成了位置、尺寸和两颗圆点间距校准；第三颗圆点按同间距外推，时间曲线仍参考社区实现。其他角色及其他气泡只有社区参数近似复现，不能标记为已全部实机对齐。新增校准后要重新 prepare，旧 scene 快照不会自动更新。优香其他独立图标里，除 `Steam`、`Zzz`、`Tear`、`Twinkle` 外，已登记供截图勘误的临时摆位（`reviewPlacementNote`），不是实机测量值。这四项改回上游脊柱偏移和原图像素尺寸，不再使用那组临时锚点。白色气泡共享 Dot 框，独立符号使用自己的位置和大小，不能把所有符号都强制放大成 Dot 白气泡。
 
 审片顺序：先在 HTML/Remotion 静态截图确认同角色、同服装、同画幅下的立绘摆放，再检查气泡轮廓、尾巴指向、圆点大小及间距；检查人物移动、1.5 倍缩放和转向时的绑定，最后生成含音效的视频。每个预设应留足入场、完整演出和淡出时间，标签不得遮挡气泡。测试通过不等于实机视觉验收；未经用户确认不合并 main，仍有未校准项时不要宣称全部完成。
+
+## 9. 封面
+
+封面与正片完全解耦：独立 HTML/CSS，用无头 Chrome 截成 1920×1080，不走 Remotion，也不改 `episode.yaml`。源文件与成图放 `videos/<episode>/cover/`（该目录不进版本库）。它和「开头标题卡」不是一回事：标题卡在片头，封面只用于投稿。
+
+### 9.1 先定内容，再排版
+
+- **一句话，最多三行**：每行 3–6 个字，总字数不超过 12；标点是语气的一部分（「！！」「……」），不要写成完整句子。
+- **只留一个重点**：标题 + 人物 + 一个强调色，最多再加一个小贴纸（头像、图标）。不加面板、标签、副标题、说明文字；用户没要求就不加。
+- **缩略图标准**：缩到 480×270 仍要能一眼读完。读不完就删字或加大字号，不要缩行距硬塞。
+- **素材**：人物取本集情绪最强的一帧立绘（通常是最新一镜的差分，如 `sprites/default/25.png`）；背景取该集主场景的暗色变体（`data/scenes/<id>/backgrounds/<id>-night.jpg`）。都用 `data/` 里的原图，不要重画。
+
+### 9.2 字体
+
+| 用途 | 字体 | 文件 |
+|---|---|---|
+| 活泼、吐槽、整活 | 站酷快乐体 | `ZCOOLKuaiLe-Regular.ttf` |
+| 更重、更硬、冲击 | 站酷庆科黄油体 | `ZCOOLQingKeHuangYou-Regular.ttf` |
+| 正式、无情绪 | PingFang SC / 思源黑体，800 | 系统字体 |
+
+- 一张封面只用一种字体；不要中文一种、英文另一种混排。
+- 字体文件放 `cover/fonts/`，用 `@font-face` 以 `file://` 绝对路径引用。无头 Chrome 不联网，不能依赖 Google Fonts 在线加载。
+- 两款站酷字体可从 Google Fonts 下载（OFL），文件名即上表；新集数直接复制 `cover/fonts/` 即可。
+- 两款站酷字体是 SIL OFL：本地生成封面可直接用；一旦把字体文件提交进仓库或随模板分发，必须在 `THIRD_PARTY_NOTICES.md` 登记。
+- 字号 200–260px（1920 宽），行高 1.0–1.06，行间用负 margin（-10 至 -20px）压紧，让标题成为一个块。站酷字体只有单一字重，写了 `font-weight` 也不会变粗；需要更粗就换庆科黄油体或加大字号。
+
+### 9.3 排版
+
+- **分区**：标题占左侧 45%–55%（`left: 80–110px`，`top: 50–200px`），人物放右侧并允许出画（`right` / `bottom` 取负值，`height` 1300–1400px）。人物完整入画通常显得拘谨。
+- **可读性**：标题用「深色粗描边 + 实心填充」叠字，保证在任何背景上都清楚：
+
+  ```css
+  .stroke { position:absolute; color:transparent; -webkit-text-stroke: 18px #061321;
+            filter: drop-shadow(8px 12px 0 rgba(0,0,0,.42)); }
+  .fill { position:relative; color:#fff; }
+  ```
+
+  描边宽度取字号的 6%–9%；再叠一层同色偏移的硬投影，做出贴纸感。需要更亮时可在描边和填充之间加一层低透明度的浅色偏移字。
+- **强调色**：只给一个关键词上色，其余保持白色；不要每行一个颜色。
+- **贴纸叠压**：小图（头像、符号）可以盖住某个字的一部分，旋转 -8° 至 -12°，加白描边和投影；压掉该字 20%–40% 即可，不要停在字正中间。
+- **背景**：先 `brightness(.9) contrast(1.06) saturate(1.1)`，再叠三层——上下渐变压暗、标题侧的冷色 radial 光（`mix-blend-mode: screen`）、四角暗角，最后加 4%–5% 细颗粒。不要加复杂图案或额外插画。
+- 人物与标题不重叠；需要叠时，让人物压背景、文字压人物肩膀等非脸部区域。
+
+### 9.4 主题色与抠图
+
+- 角色没有登记主题色时，从头像取主色相，提亮并提高饱和度，确保在深色背景上可读（例：大肥鱼取 `#5f7fe8`）。
+- 白底头像转透明：PIL + numpy 做近白掩膜（RGB 均 >225 且通道差 <20），从边缘向内 flood fill 背景并羽化 0.5–1px；再用 `binary_dilation` 扩 8–10px 生成白色描边。结果单独存成 `cover/<name>-cutout.png`，HTML 里直接引用。
+- 生成脚本在 `code/ba-production` 下用 `uv run python` 执行，不要用系统 `python3`（缺 PIL/scipy）。
+
+### 9.5 渲染、自检与交付
+
+```sh
+cd videos/<episode>/cover
+
+# 截图（无头 Chrome，本地文件必须放行）
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --headless=new --hide-scrollbars --disable-gpu --allow-file-access-from-files \
+  --screenshot=cover-final.png --window-size=1920,1080 --force-device-scale-factor=1 \
+  "file://$PWD/cover.html"
+
+# 缩略图自检（缩到 480×270 看字是否还可读）
+sips -Z 480 cover-final.png --out thumb-check.png
+
+# 交付 JPG（压到 5MB 以内）
+sips -s format jpeg -s formatOptions 90 cover-final.png --out cover-final.jpg
+```
+
+- 交付 PNG（无损、便于再编辑）+ JPG（附件上传）；附件上限约 13MB，JPG 控制在 5MB 内。
+- 每次改稿新建 `cover-<主题>.html`，定稿后删掉中间试验图，`cover/` 只留最终源文件与成图。
+- 出图前对照：缩略图可读；标题不压脸；只有一个强调色；没有面板、标签、水印、免责声明；人物和背景不是同一张图的重复使用。
