@@ -56,7 +56,7 @@ BGM 由 `episode.yaml` 的 `bgm` 块经 prepare 进入 scene.json；kivo 的 spi
 
 ## Remotion 模板
 
-- `templates/index.tsx` 只有一个 composition：`BAEpisode`。
+- `templates/official/index.tsx` 只有一个 composition：`BAEpisode`。
 - 通过 `calculateMetadata` 从 `episode` props 读取 `durationInFrames` / `fps` / `width` / `height`。
 - 渲染命令用 `--props <该集>/project/scene.json` 和 `--public-dir <该集>/raws`，因此模板完全不知道剧集目录，新增剧集不改代码。
 - 每个镜头是一个 `TransitionSeries.Sequence`；场景、角色、字幕、运镜都从 scene 数据生成。

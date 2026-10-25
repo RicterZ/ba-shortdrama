@@ -690,7 +690,7 @@ def main() -> int:
         "episode": {
             "id": config["id"],
             "title": config.get("title", ""),
-            "template": config.get("template", "blue-archive"),
+            "template": config.get("template", "official"),
             "width": int(config.get("width", 1280)),
             "height": int(config.get("height", 720)),
             "fps": fps,

@@ -197,7 +197,7 @@ def build_preview(
         "episode": {
             "id": f"fx-{character_id}-{name}",
             "title": name,
-            "template": "blue-archive",
+            "template": "official",
             "width": WIDTH,
             "height": HEIGHT,
             "fps": FPS,
@@ -259,7 +259,7 @@ def render_preview(scene: dict, raws: Path, output: Path, *, still: bool, frame:
     output.parent.mkdir(parents=True, exist_ok=True)
     duration = int(scene["episode"]["durationInFrames"])
     remotion = render.remotion_invocation()
-    entry = render.TEMPLATES["blue-archive"]
+    entry = render.TEMPLATES["official"]
     shared = [
         "--props",
         scene_path,

@@ -35,7 +35,7 @@ cd code/ba-production
 npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-momoi
 ```
 
-`episode.yaml` 的 `template` 选择渲染模板，默认 `blue-archive`；新建集数可用 `--template blue-archive` 指定。`width` / `height` / `fps` 是画幅与帧率配置，例如竖屏可用 `--width 720 --height 1280`。目前只有 `blue-archive` 模板，模板决定视觉呈现，画幅尺寸由集数配置决定。新建的剧集默认带 `transitions` 块（场景切换加 12 帧 fade），规则见下面「转场」。
+`episode.yaml` 的 `template` 选择渲染模板，默认 `official`；新建集数可用 `--template official` 指定。模板入口位于 `templates/<模板 id>/index.tsx`，当前只有 `templates/official/index.tsx`。`width` / `height` / `fps` 是画幅与帧率配置，例如竖屏可用 `--width 720 --height 1280`。模板决定视觉呈现，画幅尺寸由集数配置决定。新建的剧集默认带 `transitions` 块（场景切换加 12 帧 fade），规则见下面「转场」。
 
 生成 `videos/003-summer-patch/` 骨架和空白的 `script.json`、`storyboard.json`。填完后才能准备。
 
@@ -158,7 +158,7 @@ npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-mom
 }
 ```
 
-`image` 是相对 `data/scenes/<id>/` 的背景图；某个变体可以写自己的 `image` 覆盖它。`palette` 是基础色，`variants` 里的同名键覆盖它，`lighting` 决定模板叠加的冷光、暖光或自然光。**背景图由工作区所有者提供，模板不自行绘制房间**；缺图时 prepare 会警告并用中性底色占位。`renderer` 必须和 `templates/index.tsx` 里实现的渲染器一致，目前只有 `image-stage`。
+`image` 是相对 `data/scenes/<id>/` 的背景图；某个变体可以写自己的 `image` 覆盖它。`palette` 是基础色，`variants` 里的同名键覆盖它，`lighting` 决定模板叠加的冷光、暖光或自然光。**背景图由工作区所有者提供，模板不自行绘制房间**；缺图时 prepare 会警告并用中性底色占位。`renderer` 必须和 `templates/official/index.tsx` 里实现的渲染器一致，目前只有 `image-stage`。
 
 ### 开头标题卡
 

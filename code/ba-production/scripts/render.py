@@ -19,7 +19,7 @@ import lib  # noqa: E402
 
 BA_PRODUCTION = Path(__file__).resolve().parents[1]
 COMPOSITION = "BAEpisode"
-TEMPLATES = {"blue-archive": BA_PRODUCTION / "templates" / "index.tsx"}
+TEMPLATES = {"official": BA_PRODUCTION / "templates" / "official" / "index.tsx"}
 DEFAULT_CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 
 
@@ -114,7 +114,7 @@ def main() -> int:
     if not scene_path.is_file():
         raise SystemExit(f"缺少 {scene_path}，先运行 prepare.py")
     scene = lib.load_json(scene_path)
-    template_id = scene.get("episode", {}).get("template", "blue-archive")
+    template_id = scene.get("episode", {}).get("template", "official")
     entry = TEMPLATES.get(template_id)
     if entry is None:
         raise SystemExit(f"未知模板 {template_id!r}，可选：{', '.join(TEMPLATES)}")

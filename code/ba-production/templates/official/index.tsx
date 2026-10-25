@@ -1,7 +1,7 @@
 import React from 'react';
-import {sampleActions} from './character-actions.mjs';
-import {bubbleLayers, bubbleOpacity, bubbleGeometry} from './bubbles.mjs';
-import bubblePresets from './bubble-presets.json';
+import {sampleActions} from '../character-actions.mjs';
+import {bubbleLayers, bubbleOpacity, bubbleGeometry} from '../bubbles.mjs';
+import bubblePresets from '../bubble-presets.json';
 import {
   AbsoluteFill,
   Audio,

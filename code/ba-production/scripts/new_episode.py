@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lib  # noqa: E402
 
-TEMPLATES = {"blue-archive"}
+TEMPLATES = {"official"}
 
 SUBDIRS = [
     "audio",
@@ -36,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
     parser.add_argument("--fps", type=int, default=30)
-    parser.add_argument("--template", default="blue-archive", help="视频模板 id")
+    parser.add_argument("--template", default="official", help="视频模板 id")
     parser.add_argument("--accent", default="#e78caf")
     parser.add_argument("--kicker", default="")
     parser.add_argument("--intro-title", default="")

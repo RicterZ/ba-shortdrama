@@ -31,7 +31,7 @@
     },
     "template": {
       "type": "string",
-      "enum": ["blue-archive"]
+      "enum": ["official"]
     },
     "fps": {
       "type": "integer",
