@@ -3,6 +3,7 @@ import {sampleActions} from '../character-actions.mjs';
 import {bubbleLayers, bubbleOpacity, bubbleGeometry} from '../bubbles.mjs';
 import bubblePresets from '../bubble-presets.json';
 import {characterState} from './character-state.mjs';
+import {bgmVolume} from './bgm.mjs';
 import {
   AbsoluteFill,
   Audio,
@@ -1601,24 +1602,8 @@ const BAEpisode: React.FC<Scene> = (scene) => {
         <Audio
           src={staticFile(bgm.src)}
           loop={bgm.loop !== false}
-          volume={(f) => {
-            const base = bgm.volume ?? 0.15;
-            const total = scene.episode.durationInFrames;
-            const fadeIn = bgm.fadeInFrames ?? 45;
-            const fadeOut = bgm.fadeOutFrames ?? 75;
-            const head = fadeIn > 0 ? Math.min(1, f / fadeIn) : 1;
-            const tail = fadeOut > 0 ? Math.min(1, Math.max(0, total - f) / fadeOut) : 1;
-            const level = base * Math.max(0, Math.min(head, tail));
-            for (const range of bgm.muteRanges ?? []) {
-              const end = range.from + range.durationInFrames;
-              if (f >= range.from && f < end) return 0;
-              const resume = bgm.resumeFadeFrames ?? 0;
-              if (resume > 0 && f >= end && f < end + resume) {
-                return level * ((f - end) / resume);
-              }
-            }
-            return level;
-          }}
+          loopVolumeCurveBehavior="extend"
+          volume={(f) => bgmVolume(bgm, scene.episode.durationInFrames, f)}
         />
       ) : null}
 

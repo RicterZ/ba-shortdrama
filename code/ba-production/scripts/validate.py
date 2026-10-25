@@ -386,11 +386,7 @@ def check_scene(
         if not (raws / str(relative)).is_file():
             report.error(f"scene.ui.sfx.{key} 的音效文件不存在：{relative}")
 
-    bgm = scene.get("bgm")
-    if bgm:
-        relative = bgm.get("src")
-        if not relative or not (raws / str(relative)).is_file():
-            report.error(f"scene.bgm 的音频文件不存在：{relative}")
+    check_bgm(report, scene.get("bgm"), raws, int(scene["episode"]["durationInFrames"]))
 
     for cid, data in (scene.get("characters") or {}).items():
         outfits = data.get("outfits") or {}
@@ -462,6 +458,21 @@ def check_lock(report: Report, episode: Path) -> None:
     for path in sorted(set(recorded) & set(actual)):
         if recorded[path] != actual[path]:
             report.error(f"素材哈希不一致：{path}")
+
+
+def check_bgm(report: Report, bgm: dict | None, raws: Path, total: int) -> None:
+    if not bgm:
+        return
+    for track in [bgm, *(bgm.get("cues") or [])]:
+        relative = track.get("src")
+        if not relative or not (raws / str(relative)).is_file():
+            report.error(f"scene.bgm 的音频文件不存在：{relative}")
+    for kind in ("muteRanges", "cues"):
+        for item in bgm.get(kind) or []:
+            start, length = item.get("from"), item.get("durationInFrames")
+            if (type(start) is not int or type(length) is not int
+                    or start < 0 or length <= 0 or start + length > total):
+                report.error(f"scene.bgm.{kind} 的时间范围无效：{item}")
 
 
 def check_output(report: Report, episode: Path, scene: dict | None) -> None:

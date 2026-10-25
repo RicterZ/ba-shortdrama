@@ -173,7 +173,8 @@ bgm:
 - `atLine` 可选，把起点对齐到该镜头内某句台词；`offsetFrames` 在它之后再延迟 N 帧。
 - `mute` 是硬静音；`resumeFadeFrames` 可以给恢复加淡入（默认 0，即不做淡入淡出）。
 - `cues` 不会自动静音常驻 BGM，需要同时写 `mute`。
-- 路径相对工作区或本集目录，prepare 会复制进 `raws/audio`。
+- 路径相对工作区或本集目录，prepare 会复制进独立的 `raws/audio/bgm/`，常驻曲和每个 cue 使用不同文件名，不覆盖对白或其他曲目。修改配置后重新 prepare；validate 会检查 cue 文件和时间范围。
+- 静音区间使用全片帧号，BGM 循环不会重置静音时间；恢复淡入遇到下一段静音时仍以静音为准。
 
 ```json
 {
@@ -259,7 +260,7 @@ bgm:
 "bgm": { "file": "data/audio/bgm/0003-mischievous-step.ogg", "volume": 0.16, "loop": true, "fadeInFrames": 60, "fadeOutFrames": 90 }
 ```
 
-`file` 相对工作区根目录；prepare 会把它复制到 `raws/audio/` 并写入 `scene.bgm`，Remotion 在整片期间循环播放，按 `fadeInFrames` / `fadeOutFrames` 淡入淡出，音量为 `volume`。不写 `bgm` 就没有背景音乐。
+`file` 相对工作区根目录（也可相对本集目录）；prepare 会把它复制到 `raws/audio/bgm/` 并写入 `scene.bgm`，Remotion 在整片期间循环播放，按 `fadeInFrames` / `fadeOutFrames` 淡入淡出，音量为 `volume`。不写 `bgm` 就没有背景音乐。
 
 ## 4. 准备
 
