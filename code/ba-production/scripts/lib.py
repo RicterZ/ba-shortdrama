@@ -378,6 +378,76 @@ def spoken_text(line: dict) -> str:
     return (line.get("voice_text") or line.get("text") or "").strip()
 
 
+def dialogue_audio_names(script: list[dict], board: list[dict]) -> dict[str, str]:
+    """Validate ownership and build portable, collision-free dialogue names."""
+    def safe_id(value):
+        return isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,99}", value)
+
+    lines = {}
+    for line in script:
+        lid = line["id"]
+        if not safe_id(lid) or lid in lines:
+            raise ValueError(f"Invalid or duplicate dialogue id: {lid!r}")
+        lines[lid] = line
+    names, shots, used = {}, set(), set()
+    for shot in board:
+        sid = shot.get("id")
+        if not safe_id(sid) or sid.casefold() in shots or sid.casefold() == "mono":
+            raise ValueError(f"Invalid or duplicate shot id: {sid!r}")
+        shots.add(sid.casefold())
+        for lid in shot.get("lines") or []:
+            if not isinstance(lid, str) or lid not in lines or lid in names:
+                raise ValueError(f"Unknown or multiply assigned dialogue id: {lid!r}")
+            name = f"{sid}-{lid}.mp3"
+            if name.casefold() in used:
+                raise ValueError(f"Dialogue filename collision: {name}")
+            used.add(name.casefold())
+            names[lid] = name
+    if lines.keys() != names.keys():
+        raise ValueError(f"Dialogue missing from storyboard: {sorted(lines.keys() - names.keys())}")
+    return names
+
+
+def legacy_dialogue_sources(episode: Path, script: list[dict], names: dict[str, str]) -> dict[str, Path]:
+    """Resolve legacy recordings by saved identity, never by current script order."""
+    audio = episode / "audio"
+    legacy = {p.name: p for p in audio.glob("*.mp3") if re.fullmatch(r"[0-9]+\.mp3", p.name)}
+    if not legacy:
+        return {}
+    timing = audio / "timing.json"
+    entries = load_json(timing).get("lines", []) if timing.is_file() else []
+    result, used = {}, set()
+    for line in script:
+        lid = line["id"]
+        if line.get("silent") or (audio / names[lid]).is_file():
+            continue
+        matches = [entry for entry in entries if entry.get("id") == lid]
+        entry = matches[0] if len(matches) == 1 else {}
+        relative = entry.get("audio", "")
+        name = relative.removeprefix("audio/") if isinstance(relative, str) else ""
+        if (relative != f"audio/{name}" or name not in legacy or name in used
+                or entry.get("speaker") != line["speaker"] or entry.get("text") != line["text"]
+                or spoken_text(entry) != spoken_text(line)):
+            raise ValueError(
+                f"Cannot safely reuse legacy audio for {lid}; verify audio/timing.json "
+                f"or manually copy the confirmed recording to audio/{names[lid]}"
+            )
+        result[lid] = legacy[name]
+        used.add(name)
+    return result
+
+
+def copy_legacy_dialogue(source: Path, target: Path) -> None:
+    # Exclusive creation preserves any recording already at the destination.
+    data = source.read_bytes()
+    with target.open("xb") as output:
+        try:
+            output.write(data)
+        except OSError:
+            target.unlink()
+            raise
+
+
 def probe_duration(path: Path) -> float:
     return float(probe_media(path)["format"]["duration"])
 

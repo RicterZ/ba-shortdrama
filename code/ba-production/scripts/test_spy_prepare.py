@@ -16,13 +16,14 @@ class ReactionTimingTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             episode = Path(tmp)
             (episode / "audio").mkdir()
-            (episode / "audio/001.mp3").write_bytes(b"reused audio")
+            (episode / "audio/S1-L2.mp3").write_bytes(b"reused audio")
             with patch.object(prepare.voice, "synthesize_line") as synth, patch.object(
                 lib, "probe_duration", return_value=2.0
             ):
                 timed, _, _ = prepare.build_timing(
                     script, {"c": {"default_outfit": "default", "voice": {}}}, {},
                     episode, 30, lib.DEFAULT_TIMING, True, 30, False,
+                    board=[{"id": "S1", "lines": ["L1", "L2"]}],
                 )
             synth.assert_not_called()
             shots, _, _ = prepare.build_shots(
@@ -34,8 +35,8 @@ class ReactionTimingTest(unittest.TestCase):
             self.assertEqual(silent["text"], "Silent caption")
             self.assertEqual(silent["durationInFrames"], timed[0]["frames"])
             self.assertEqual(voiced["from"], silent["from"] + silent["durationInFrames"])
-            self.assertEqual(voiced["audio"], "audio/001.mp3")
-            self.assertEqual((episode / "raws/audio/001.mp3").read_bytes(), b"reused audio")
+            self.assertEqual(voiced["audio"], "audio/S1-L2.mp3")
+            self.assertEqual((episode / "raws/audio/S1-L2.mp3").read_bytes(), b"reused audio")
             self.assertFalse((episode / "raws/audio/000.mp3").exists())
 
     def test_reactions_keep_duration_at_start_middle_and_end(self):
@@ -56,7 +57,7 @@ class ReactionTimingTest(unittest.TestCase):
                 leading, gaps = prepare.reaction_gaps(board)
                 timed, _, _ = prepare.build_timing(
                     script, {"c": character}, {}, Path(tmp), 30, lib.DEFAULT_TIMING,
-                    False, 30, False, line_gaps=gaps, leading_frames=leading,
+                    False, 30, False, line_gaps=gaps, leading_frames=leading, board=board,
                 )
                 self.assertEqual(timed[0]["start"], 90 + lib.DEFAULT_TIMING["lead_in_frames"])
                 shots, total, _ = prepare.build_shots(

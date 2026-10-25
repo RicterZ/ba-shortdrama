@@ -138,7 +138,10 @@ def build_timing(
     intro_hold: int = 0,
     line_gaps: dict[str, int] | None = None,
     leading_frames: int = 0,
+    board: list[dict] | None = None,
 ) -> tuple[list[dict], int, dict]:
+    names = lib.dialogue_audio_names(script, board or [])
+    legacy = lib.legacy_dialogue_sources(episode, script, names) if reuse_audio else {}
     gaps = line_gaps or {}
     audio_dir = episode / "audio"
     raws_audio = episode / "raws" / "audio"
@@ -150,10 +153,10 @@ def build_timing(
     cursor = leading_frames + intro_hold + timing_cfg["lead_in_frames"]
     timed: list[dict] = []
     providers: dict[str, int] = {}
-    for index, line in enumerate(script):
+    for line in script:
         char = characters[line["speaker"]]
         outfit_id = line_outfits.get(line["id"], char["default_outfit"])
-        target = audio_dir / f"{index:03}.mp3"
+        target = audio_dir / names[line["id"]]
         if line.get("silent"):
             # Text-only beat such as a lone "……": keep the caption, skip TTS.
             frames = max(timing_cfg["min_line_frames"], int(0.8 * fps))
@@ -172,6 +175,8 @@ def build_timing(
             )
             cursor += frames + gaps.get(line["id"], 0)
             continue
+        if line["id"] in legacy:
+            lib.copy_legacy_dialogue(legacy[line["id"]], target)
         if reuse_audio and target.is_file():
             tts = {"provider": "reused", "voice_id": "", "model": "", "speed": 1.0, "fallback": False}
         else:
@@ -747,6 +752,9 @@ def main() -> int:
         raise SystemExit("script.json 为空，先写台词再准备")
     if not board:
         raise SystemExit("storyboard.json 还没有镜头")
+    names = lib.dialogue_audio_names(script, board)
+    if args.reuse_audio:
+        lib.legacy_dialogue_sources(episode, script, names)
 
     fps = int(config.get("fps", 30))
     timing_cfg = {**lib.DEFAULT_TIMING, **(config.get("timing") or {})}
@@ -797,6 +805,7 @@ def main() -> int:
         intro_hold,
         line_gaps,
         leading_frames,
+        board,
     )
     scenes: dict[tuple[str, str | None], dict] = {}
     shots, total_frames, line_shifts = build_shots(
@@ -978,6 +987,7 @@ def main() -> int:
                 "outfit": line["outfit"],
                 "emotion": line["emotion"],
                 "text": line["text"],
+                **({"voice_text": line["voice_text"]} if "voice_text" in line else {}),
                 "start": line["start"],
                 "frames": line["frames"],
                 "seconds": line["seconds"],

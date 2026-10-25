@@ -448,6 +448,7 @@ def load_episode_plan(episode: Path) -> tuple[dict, list[dict], dict[str, dict],
     board = lib.load_json(episode / "storyboard.json").get("shots", [])
     if not script:
         raise SystemExit("script.json 为空，先写台词再生成语音")
+    lib.dialogue_audio_names(script, board)
     character_ids = list(config.get("characters") or [])
     if not character_ids:
         raise SystemExit("episode.yaml 的 characters 为空")
@@ -552,6 +553,10 @@ def cmd_episode(args: argparse.Namespace) -> int:
         if missing:
             raise SystemExit(f"script.json 中没有这些台词：{', '.join(sorted(missing))}")
     selected_ids = {line["id"] for line in script if only is None or line["id"] in only}
+    board = lib.load_json(episode / "storyboard.json").get("shots", [])
+    names = lib.dialogue_audio_names(script, board)
+    selected = [line for line in script if line["id"] in selected_ids]
+    legacy = lib.legacy_dialogue_sources(episode, selected, names) if args.reuse else {}
     log.info(
         "episode start id=%s selected=%d total=%d only=%s reuse=%s fallback=%s",
         episode.name, len(selected_ids), len(script), args.only or "-", args.reuse, args.fallback,
@@ -562,11 +567,13 @@ def cmd_episode(args: argparse.Namespace) -> int:
     failures: list[tuple[str, str]] = []
     pending: list[tuple[int, dict, dict, Path]] = []
     for index, line in enumerate(script):
-        if line["id"] not in selected_ids:
+        if line["id"] not in selected_ids or line.get("silent"):
             continue
         char = characters[line["speaker"]]
-        target = audio_dir / f"{index:03}.mp3"
-        if args.reuse and target.is_file():
+        target = audio_dir / names[line["id"]]
+        if line["id"] in legacy and not args.dry_run:
+            lib.copy_legacy_dialogue(legacy[line["id"]], target)
+        if args.reuse and (target.is_file() or line["id"] in legacy):
             providers["reused"] = providers.get("reused", 0) + 1
             reused += 1
             continue
@@ -675,9 +682,16 @@ def cmd_episode(args: argparse.Namespace) -> int:
 def cmd_retrim(args: argparse.Namespace) -> int:
     episode = lib.resolve_episode(args.episode, lock=True)
     audio_dir = episode / "audio"
-    files = sorted(p for p in audio_dir.glob("[0-9][0-9][0-9].mp3") if p.is_file())
+    script = lib.normalize_script(lib.load_json(episode / "script.json"))
+    board = lib.load_json(episode / "storyboard.json").get("shots", [])
+    names = lib.dialogue_audio_names(script, board)
+    legacy = lib.legacy_dialogue_sources(episode, script, names)
+    for lid, source in legacy.items():
+        lib.copy_legacy_dialogue(source, audio_dir / names[lid])
+    files = [audio_dir / names[line["id"]] for line in script
+             if not line.get("silent") and (audio_dir / names[line["id"]]).is_file()]
     if not files:
-        raise SystemExit(f"{audio_dir} 里没有 NNN.mp3，先生成语音")
+        raise SystemExit(f"{audio_dir} 里没有对白音频，先生成语音")
     print(f"重新裁静音：{episode.name}，{len(files)} 句")
     before_total = 0.0
     after_total = 0.0
@@ -721,7 +735,7 @@ def parse_args() -> argparse.Namespace:
 
     episode = sub.add_parser("episode", help="生成一集全部台词的语音")
     episode.add_argument("--episode", required=True, help="剧集 id 或目录路径")
-    episode.add_argument("--reuse", action="store_true", help="已有 audio/NNN.mp3 就跳过")
+    episode.add_argument("--reuse", action="store_true", help="已有 audio/<shot>-<line>.mp3 就跳过")
     episode.add_argument("--only", help="只处理这些台词，逗号分隔（如 L7,L12）")
     episode.add_argument("--keep-going", action="store_true", help="单句失败后继续合成后面的台词")
     episode.add_argument("--dry-run", action="store_true", help="只打印计划，不调用 provider")
