@@ -233,7 +233,13 @@ class BcutTests(unittest.TestCase):
         clips = draft["timelineWidget"]["timeline"]["videoTracks"][1]["clips"]
         self.assertEqual(
             [(c["inPoint"], c["outPoint"], c["assetInfo"]["displayName"]) for c in clips],
-            [(0, 333, "c default"), (333, 667, "c happy"), (667, 3000, "c shy")])
+            [(0, 333, "c default"), (333, 666, "c happy"), (666, 3000, "c shy")])
+        # At the exact first frame of the new expression, only it is active.
+        at = 20 * 1000 / 30
+        active = [c for c in clips if c["inPoint"] <= at < c["outPoint"]]
+        self.assertEqual([c["assetInfo"]["displayName"] for c in active], ["c shy"])
+        for clip in clips:
+            self.assertEqual(clip["trimOut"] - clip["trimIn"], clip["outPoint"] - clip["inPoint"])
 
     def test_hold_emotion_stays_after_the_line(self):
         self.scene["shots"][0]["characters"][0]["emotion"] = "default"

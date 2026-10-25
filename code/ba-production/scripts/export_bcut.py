@@ -173,7 +173,9 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
     width, height, fps = ep["width"], ep["height"], ep["fps"]
     if min(width, height, fps, ep["durationInFrames"]) <= 0:
         raise ValueError("Invalid canvas, frame rate or duration")
-    ms = lambda frame: round(frame * 1000 / fps)
+    # Bcut samples at exact frame times. Rounding a boundary upward keeps the
+    # previous clip visible for one extra frame (e.g. frame 1424 at 30 fps).
+    ms = lambda frame: math.floor(frame * 1000 / fps)
     end_ms = ms(ep["durationInFrames"])
     assets = output / "assets"
     assets.mkdir()
