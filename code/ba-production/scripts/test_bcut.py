@@ -146,12 +146,46 @@ class BcutTests(unittest.TestCase):
 
     def test_reject_unsafe_asset_and_unsupported_template(self):
         bad = copy.deepcopy(self.scene)
+        bad["episode"]["template"] = "blue-archive"
+        with self.assertRaisesRegex(ValueError, "official"):
+            export_bcut.build(bad, self.raws, self.bundle)
+        bad = copy.deepcopy(self.scene)
         bad["shots"][0]["scene"]["image"] = "../outside.png"
         with self.assertRaises(ValueError):
             export_bcut.build(bad, self.raws, self.bundle)
-        bad["episode"]["template"] = "who-is-the-spy"
-        with self.assertRaisesRegex(ValueError, "official"):
-            export_bcut.build(bad, self.raws, self.bundle)
+
+    def test_spy_places_text_and_splits_muted_music(self):
+        self.scene["episode"]["template"] = "who-is-the-spy"
+        self.scene["characters"]["c"]["color"] = "#ff8800"
+        self.scene["shots"][0]["characters"][0]["x"] = 0.1
+        self.scene["shots"][0]["characters"][0]["label"] = {"text": "西瓜", "tone": "normal"}
+        self.scene["shots"][0]["systemVoice"] = "voice.wav"
+        self.scene["shots"][0]["voteTags"] = [{"speaker": "c", "text": "凯伊"}]
+        self.scene["shots"][0]["lines"][0]["text"] = "外面有条纹。"
+        self.scene["shots"][0]["lines"].append({
+            "from": 50, "durationInFrames": 20, "speaker": "c", "kind": "thought",
+            "text": "好像不是。", "audio": "voice.wav",
+        })
+        self.scene["bgm"]["muteRanges"] = [{"from": 30, "durationInFrames": 30}]
+        self.scene["bgm"]["cues"] = [{
+            "from": 30, "durationInFrames": 30, "src": "voice.wav", "volume": 0.5, "loop": False,
+        }]
+        draft = self.build()
+        tl = draft["timelineWidget"]["timeline"]
+        speech, thought = tl["captionTracks"][0]["captions"]
+        self.assertEqual(speech["captionText"], "外面有条纹")
+        self.assertEqual(thought["captionText"], "好像不是")
+        self.assertLess(speech["transY"], thought["transY"])
+        self.assertGreater(speech["scaleX"], thought["scaleX"])
+        label = tl["captionTracks"][1]["captions"][0]
+        self.assertEqual((label["captionText"], label["transX"] < 0, label["transY"] > 0.5),
+                         ("西瓜", True, True))
+        vote = tl["captionTracks"][2]["captions"][0]
+        self.assertEqual((vote["captionText"], vote["inPoint"], vote["outPoint"]), ("凯伊", 2333, 3000))
+        music = tl["audioTracks"][1]["audioClips"]
+        self.assertEqual([(c["inPoint"], c["outPoint"]) for c in music], [(0, 1000), (2000, 3000)])
+        self.assertEqual([(c["inPoint"], c["outPoint"]) for c in tl["audioTracks"][3]["audioClips"]],
+                         [(1000, 2000)])
 
 
 if __name__ == "__main__":

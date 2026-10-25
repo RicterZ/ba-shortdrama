@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 
 import av
-from PIL import Image, ImageOps
+from PIL import Image, ImageEnhance, ImageOps
 
 import lib
 
@@ -82,6 +82,74 @@ def expression_spans(entry, shot, start, end):
     return spans
 
 
+def hex_rgb(value, fallback="#ffffff"):
+    text = str(value or fallback).strip().lstrip("#")
+    if len(text) != 6 or any(ch not in "0123456789abcdefABCDEF" for ch in text):
+        text = fallback.lstrip("#")
+    number = int(text, 16)
+    return {"r": ((number >> 16) & 255) / 255, "g": ((number >> 8) & 255) / 255,
+            "b": (number & 255) / 255, "a": 1}
+
+
+def caption_scale(size_frac):
+    """Map a frame-height fraction onto the draft template's subtitle scale."""
+    return round(0.56 * (size_frac / 0.042), 4)
+
+
+def caption_x(value):
+    clamped = min(0.92, max(0.08, float(value)))
+    return round((clamped - 0.5) * 2, 4)
+
+
+def caption_y_top(top_frac, size_frac):
+    center = top_frac + size_frac * 1.12 / 2
+    return round(1 - 2 * center, 4)
+
+
+def caption_y_bottom(bottom_frac, size_frac):
+    center = 1 - bottom_frac - size_frac * 1.12 / 2
+    return round(1 - 2 * center, 4)
+
+
+def meme_size(text, base, width_frac):
+    return min(base, width_frac / (max(1, len(text)) * 1.02))
+
+
+def shot_focus(shot):
+    """Spotlight holds for a thought shot or a silent reaction, not during speech."""
+    focus = shot.get("focus")
+    if not focus:
+        return None
+    lines = shot.get("lines") or []
+    if any(line.get("kind", "speech") != "thought" for line in lines):
+        return None
+    return focus
+
+
+def audible_spans(start, end, mutes):
+    cursor = start
+    spans = []
+    for mute in sorted(mutes or [], key=lambda item: int(item["from"])):
+        mute_start = int(mute["from"])
+        mute_end = mute_start + int(mute["durationInFrames"])
+        if mute_end <= cursor or mute_start >= end:
+            continue
+        if mute_start > cursor:
+            spans.append((cursor, min(mute_start, end)))
+        cursor = max(cursor, min(mute_end, end))
+    if cursor < end:
+        spans.append((cursor, end))
+    return spans
+
+
+def tone(image, brightness=None, color=None):
+    if color is not None:
+        image = ImageEnhance.Color(image).enhance(color)
+    if brightness is not None:
+        image = ImageEnhance.Brightness(image).enhance(brightness)
+    return image
+
+
 def template(name):
     value = json.loads((TEMPLATES / f"{name}.json").read_text(encoding="utf-8"))
 
@@ -98,8 +166,10 @@ def template(name):
 
 def build(scene, raws, output):
     ep = scene["episode"]
-    if ep.get("template", "official") not in {"official", "blue-archive"}:
-        raise ValueError("Only the official template is supported; spy UI cannot be translated.")
+    template_id = ep.get("template", "official")
+    if template_id not in {"official", "who-is-the-spy"}:
+        raise ValueError("Only the official and who-is-the-spy templates are supported.")
+    spy = template_id == "who-is-the-spy"
     width, height, fps = ep["width"], ep["height"], ep["fps"]
     if min(width, height, fps, ep["durationInFrames"]) <= 0:
         raise ValueError("Invalid canvas, frame rate or duration")
@@ -115,9 +185,14 @@ def build(scene, raws, output):
     registered = set()
     warnings = [
         "必剪 3.10.3 明文草稿。本机没有安装必剪，还没有在应用里打开验证。",
-        "可编辑的静态分层，不是成片逐帧复刻：没有镜头运动、转场叠化、入场、走位、转身、气泡、压暗和界面按钮。片头只导出标题。",
+        "可编辑的静态分层，不是成片逐帧复刻：没有镜头运动、转场叠化、入场、走位、转身、气泡和界面按钮。片头只导出标题。",
         "立绘按分镜位置烘焙成透明底全画布图。说话时用该句表情，说完回到镜头常驻脸；holdEmotion 和 emotionCues 会保留。",
     ]
+    if spy:
+        warnings.append(
+            "谁是卧底的词牌、大字幕、心理字幕和投票字按画面位置写成字幕。描边是必剪的单层描边。"
+            "聚光灯只压暗背景和其他角色，没有径向光。"
+        )
 
     def source(relative):
         path = (raws / relative).resolve()
@@ -165,16 +240,30 @@ def build(scene, raws, output):
             draft["mainWindow"]["browserPanelFiles"].append(item)
             registered.add(path)
 
-    def caption(text, start, end):
+    def caption(text, start, end, index=0, x=None, y=None, scale=None,
+                color=None, outline=None, rotation=None):
         if not text or end <= start:
             return
         clip = template("caption")
         clip.update(captionText=text, inPoint=start, outPoint=end)
         for key in ("defaultFontPath", "fontPackagePath"):
             clip[key] = ""
+        if x is not None:
+            clip["transX"] = x
+        if y is not None:
+            clip["transY"] = y
+        if scale is not None:
+            clip["scaleX"] = clip["scaleY"] = scale
+            clip["outlineWidth"] = 12.5 * scale / 0.56
+        if color is not None:
+            clip["textColor"] = hex_rgb(color)
+        if outline is not None:
+            clip["outlineColor"] = hex_rgb(outline)
+        if rotation is not None:
+            clip["rotation"] = rotation
         clip["assetInfo"].update(content=text, displayName=text, duration=end-start,
                                   fontSrcPath="")
-        track("caption", 0).append(clip)
+        track("caption", index).append(clip)
 
     def audio(relative, start, end, index, volume=1, loop=False, fade_in=0, fade_out=0):
         if not math.isfinite(volume) or volume < 0:
@@ -213,12 +302,15 @@ def build(scene, raws, output):
         if not bg:
             raise ValueError(f"Shot {shot['id']} has no snapshot background image")
         name = copied(bg)
+        focus = shot_focus(shot) if spy else None
         with Image.open(assets / name) as im:
             bg_name = f"background-{uuid.uuid4().hex}.png"
             fitted = ImageOps.fit(im.convert("RGB"), (width, height))
+            if focus:
+                fitted = tone(fitted, brightness=0.46, color=0.72)
             fitted.save(assets / bg_name)
             if not (output / "cover.jpg").exists():
-                fitted.save(output / "cover.jpg", quality=85)
+                fitted.convert("RGB").save(output / "cover.jpg", quality=85)
         image(bg_name, start, end, 0, shot["id"])
         for entry in shot.get("characters", []):
             char = scene["characters"][entry["id"]]
@@ -238,6 +330,8 @@ def build(scene, raws, output):
                     im = im.resize((w, h), Image.Resampling.LANCZOS)
                     if entry.get("facing") == "left":
                         im = ImageOps.mirror(im)
+                    if focus and entry["id"] != focus:
+                        im = tone(im, brightness=0.38, color=0.28)
                     canvas = Image.new("RGBA", (width, height))
                     # CSS scales about the center of the original (unscaled) box.
                     box_h = height * entry.get("height", 1.08)
@@ -246,24 +340,82 @@ def build(scene, raws, output):
                     name = f"pose-{uuid.uuid4().hex}.png"
                     canvas.save(assets / name)
                 image(name, ms(a), ms(b), track_index, f"{entry['id']} {emotion}")
-        for line in shot["lines"]:
+            if not spy:
+                continue
+            label = entry.get("label") or {}
+            if not label.get("text"):
+                continue
+            label_end = end_frame
+            motion = entry.get("motion") or {}
+            if motion.get("startFrame") is not None:
+                label_end = min(label_end, int(shot["from"]) + int(motion["startFrame"]))
+            secret = label.get("tone") == "secret"
+            size = 0.058
+            caption(label["text"], ms(start_frame), ms(label_end), 1,
+                    x=caption_x(entry.get("x", 0.5)), y=caption_y_top(0.018, size),
+                    scale=caption_scale(size), rotation=label.get("rotate", -3),
+                    color="#ff9ab7" if secret else "#a9dcff",
+                    outline="#ff5f8f" if secret else "#123a5a")
+        if spy and shot.get("systemVoice"):
+            audio(shot["systemVoice"], start, end, 3)
+        lines = shot.get("lines") or []
+        for line in lines:
             a, b = ms(line["from"]), ms(line["from"] + line["durationInFrames"])
-            caption(line["text"], a, b)
+            shown = line["text"].replace("。", "") if spy else line["text"]
+            if spy and line.get("kind") == "thought":
+                size = meme_size(shown, 0.048, 0.7)
+                caption(shown, a, b, y=caption_y_bottom(0.17, size), scale=caption_scale(size),
+                        color="#ffffff", outline="#0b1119", rotation=-1)
+            elif spy:
+                size = meme_size(shown, 0.098, 0.84)
+                color = scene["characters"].get(line["speaker"], {}).get("color", "#ffffff")
+                caption(shown, a, b, y=caption_y_bottom(0.06, size), scale=caption_scale(size),
+                        color=color, outline=color, rotation=-1.2)
+            else:
+                caption(shown, a, b)
             if line.get("audio"):
                 audio(line["audio"], a, b, 0)
             ui = scene.get("ui", {})
             click = ui.get("sfx", {}).get("click")
-            if click and ui.get("lineClick", True) and a >= ms(scene.get("intro", {}).get("durationInFrames", 0)):
+            thought = spy and line.get("kind") == "thought"
+            if click and not thought and ui.get("lineClick", True) and a >= ms(scene.get("intro", {}).get("durationInFrames", 0)):
                 audio(click, a, min(end_ms, a + ms(10)), 2, ui.get("lineClickVolume", .14))
+        if spy and shot.get("voteTags"):
+            vote_from = max(line["from"] + line["durationInFrames"] for line in lines) if lines else start_frame
+            vote_from = max(start_frame, vote_from)
+            for tag in shot["voteTags"]:
+                speaker = next((entry for entry in shot.get("characters", [])
+                                if entry["id"] == tag.get("speaker")), None)
+                if not speaker or not tag.get("text") or vote_from >= end_frame:
+                    continue
+                size = 0.05
+                caption(tag["text"], ms(vote_from), ms(end_frame), 2,
+                        x=caption_x(speaker.get("x", 0.5)), y=caption_y_top(0.62, size),
+                        scale=caption_scale(size), rotation=-2,
+                        color=scene["characters"].get(tag["speaker"], {}).get("color", "#ffffff"),
+                        outline="#08111f")
     intro = scene.get("intro", {})
     caption(intro.get("title"), 0, ms(intro.get("durationInFrames", 0)))
     bgm = scene.get("bgm")
     if bgm:
-        audio(bgm["src"], 0, end_ms, 1, bgm.get("volume", .15), bgm.get("loop", True),
-              ms(bgm.get("fadeInFrames", 45)), ms(bgm.get("fadeOutFrames", 75)))
-    for key, clips in (("videoTracks", "clips"), ("audioTracks", "audioClips"), ("captionTracks", "captions")):
+        mutes = bgm.get("muteRanges") if spy else None
+        resume = int(bgm.get("resumeFadeFrames", 0)) if spy else 0
+        for span_start, span_end in audible_spans(0, ep["durationInFrames"], mutes):
+            fade_in = bgm.get("fadeInFrames", 45) if span_start == 0 else resume
+            fade_out = bgm.get("fadeOutFrames", 75) if span_end == ep["durationInFrames"] else 0
+            audio(bgm["src"], ms(span_start), ms(span_end), 1, bgm.get("volume", .15),
+                  bgm.get("loop", True), ms(fade_in), ms(fade_out))
+        if spy:
+            for cue in bgm.get("cues") or []:
+                audio(cue["src"], ms(cue["from"]), ms(cue["from"] + cue["durationInFrames"]),
+                      4, cue.get("volume", 0.5), cue.get("loop", True))
+    for key, clip_key in (("videoTracks", "clips"), ("audioTracks", "audioClips"), ("captionTracks", "captions")):
+        kept = [item for item in tl[key] if item[clip_key]]
+        for index, item in enumerate(kept):
+            item["index"] = index
+        tl[key] = kept
         for item in tl[key]:
-            item[clips].sort(key=lambda clip: (clip["inPoint"], clip["outPoint"]))
+            item[clip_key].sort(key=lambda clip: (clip["inPoint"], clip["outPoint"]))
     draft["timelineWidget"]["tracking"]["tracks"].update(
         video_tracks=len(tl["videoTracks"]), audio_tracks=len(tl["audioTracks"]),
         video_count=sum(len(t["clips"]) for t in tl["videoTracks"]),

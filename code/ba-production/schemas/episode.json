@@ -31,7 +31,7 @@
     },
     "template": {
       "type": "string",
-      "enum": ["official", "who-is-the-spy", "blue-archive"]
+      "enum": ["official", "who-is-the-spy"]
     },
     "fps": {
       "type": "integer",
