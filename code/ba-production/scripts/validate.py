@@ -152,6 +152,11 @@ def check_script_and_board(
         report.error("storyboard.json 还没有镜头")
         return script, []
 
+    try:
+        lib.dialogue_audio_names(script, shots_raw)
+    except ValueError as exc:
+        report.error(str(exc))
+
     shot_ids = set()
     checked_scenes: set[str] = set()
     flat = []
@@ -264,6 +269,7 @@ def check_timing(
         return timing
 
     raws = episode / "raws"
+    script_by_id = {line["id"]: line for line in script}
     previous_end = -1
     for line in lines:
         start = int(line.get("start", -1))
@@ -275,7 +281,10 @@ def check_timing(
         if start < previous_end:
             report.error(f"台词 {line.get('id')} 与上一句时间重叠")
         previous_end = start + frames
+        if script_by_id[line["id"]].get("silent"):
+            continue
         if not line.get("audio"):
+            report.error(f"台词 {line.get('id')} 缺少音频（非 silent 行）")
             continue
         if not audio.is_file():
             report.error(f"台词 {line.get('id')} 的音频不存在：{audio}")

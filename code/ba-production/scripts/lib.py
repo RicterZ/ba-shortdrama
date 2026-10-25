@@ -357,8 +357,12 @@ def normalize_script(script: list[dict]) -> list[dict]:
         text = (entry.get("text") or "").strip()
         if not text:
             raise ValueError(f"台词 {lid} 为空")
+        kind = entry.get("kind", "speech")
+        if kind not in ("speech", "thought"):
+            raise ValueError(f"台词 {lid} 的 kind 必须是 speech 或 thought：{kind!r}")
         line = {
             "id": lid,
+            "kind": kind,
             "speaker": entry.get("speaker") or "",
             "emotion": entry.get("emotion") or "default",
             "text": text,
@@ -391,6 +395,11 @@ def dialogue_audio_names(script: list[dict], board: list[dict]) -> dict[str, str
         lines[lid] = line
     names, shots, used = {}, set(), set()
     for shot in board:
+        if "monologue" in shot:
+            raise ValueError(
+                f"镜头 {shot.get('id')} 的 monologue 已停用；请迁移到 script.json 的 "
+                'kind="thought" 行，并用 lines 引用'
+            )
         sid = shot.get("id")
         if not safe_id(sid) or sid.casefold() in shots or sid.casefold() == "mono":
             raise ValueError(f"Invalid or duplicate shot id: {sid!r}")

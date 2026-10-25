@@ -63,6 +63,7 @@ type CharacterData = {
 type Line = {
   id: string;
   speaker: string;
+  kind?: 'speech' | 'thought';
   outfit: string;
   emotion: string;
   text: string;
@@ -152,8 +153,6 @@ type Shot = {
   camera: string;
   /** Character held in the spotlight: others and the room dim around them. */
   focus?: string | null;
-  /** Inner monologue. Only shown after the shot's last line ends. */
-  monologue?: { speaker: string; text: string; audio?: string | null } | null;
   /** Vote result tags shown on the characters after the last line. */
   voteTags?: Array<{ speaker: string; text: string }> | null;
   /** One-shot system voice (vote announcer) played at the start of the shot. */
@@ -1384,8 +1383,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
   const lastLineEnd = lastLine
     ? lastLine.from - shot.from + lastLine.durationInFrames
     : 0;
-  // Monologue and vote overlays own the silent tail after the final line; they
-  // never interrupt dialogue.
+  // Vote overlays own the silent tail after the final line.
   const tailActive = !activeLine && frame >= lastLineEnd;
   // Keep the previous speaker highlighted through the gap between lines.
   // Snapping back to full brightness for a few frames and dimming again on the
@@ -1396,6 +1394,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
   // Before the first line of a shot, hold the first speaker's highlight instead
   // of flashing back to full brightness for the lead-in frames.
   const displayLine = activeLine ?? lastSpoken ?? shot.lines[0];
+  const thoughtMode = displayLine?.kind === 'thought';
   const promptSpeaker =
     lastLine?.speaker || (shot.characters[0]?.id ?? '');
 
@@ -1417,10 +1416,9 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
 
   const { width, height } = useVideoConfig();
   const focusId = shot.focus ?? null;
-  // The spotlight belongs to the inner-monologue mode. While a line is being
-  // spoken the room and the rest of the cast stay at full colour.
+  // Thoughts and reaction shots use the spotlight; speech stays full colour.
   const focusEntry =
-    tailActive && focusId
+    (thoughtMode || !shot.lines.length) && focusId
       ? shot.characters.find((entry) => entry.id === focusId)
       : undefined;
   // The spotlighted character is drawn last so they sit in front of the room.
@@ -1472,7 +1470,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
                 entry={entry}
                 data={scene.characters[entry.id]}
                 activeLine={activeLine}
-                highlightedSpeaker={displayLine?.speaker}
+                highlightedSpeaker={thoughtMode ? undefined : displayLine?.speaker}
                 heldEmotion={entry.holdEmotion ? heldEmotionFor(entry.id) : undefined}
                 shadowColor="rgba(20,30,45,0.22)"
                 shotDuration={shot.durationInFrames}
@@ -1488,14 +1486,10 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
         <Audio src={staticFile(shot.systemVoice)} />
       ) : null}
 
-      {shot.monologue?.audio ? (
-        <Audio src={staticFile(shot.monologue.audio)} />
-      ) : null}
-
-      {tailActive && shot.monologue ? (
+      {activeLine?.kind === 'thought' ? (
         <ThoughtText
-          text={withoutPeriod(shot.monologue.text)}
-          color={scene.characters[shot.monologue.speaker]?.color || '#ffffff'}
+          text={withoutPeriod(activeLine.text)}
+          color={scene.characters[activeLine.speaker]?.color || '#ffffff'}
           width={width}
           height={height}
         />
@@ -1543,7 +1537,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
             <ChoiceBox choices={shot.choices} sfx={scene.ui?.sfx} />
           ) : null}
 
-          {activeLine ? (
+          {activeLine?.kind === 'thought' ? null : activeLine ? (
             captionStyle === 'meme' ? (
               <MemeCaption
                 key={`caption-${activeLine.id}`}
@@ -1658,7 +1652,7 @@ const BAEpisode: React.FC<Scene> = (scene) => {
             >
               {line.audio ? <Audio src={staticFile(line.audio)} /> : null}
             </Sequence>
-            {ui?.sfx?.click && ui.lineClick !== false && line.from >= introEnd ? (
+            {line.kind !== 'thought' && ui?.sfx?.click && ui.lineClick !== false && line.from >= introEnd ? (
               <Sfx
                 src={ui.sfx.click}
                 from={line.from}
