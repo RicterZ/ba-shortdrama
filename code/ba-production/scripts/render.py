@@ -19,7 +19,12 @@ import lib  # noqa: E402
 
 BA_PRODUCTION = Path(__file__).resolve().parents[1]
 COMPOSITION = "BAEpisode"
-TEMPLATES = {"official": BA_PRODUCTION / "templates" / "official" / "index.tsx"}
+TEMPLATES = {
+    "official": BA_PRODUCTION / "templates" / "official" / "index.tsx",
+    "who-is-the-spy": BA_PRODUCTION / "templates" / "who-is-the-spy" / "index.tsx",
+    # Pre-rename episodes keep rendering without a re-prepare.
+    "blue-archive": BA_PRODUCTION / "templates" / "official" / "index.tsx",
+}
 DEFAULT_CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 
 

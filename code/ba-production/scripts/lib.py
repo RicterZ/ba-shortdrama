@@ -367,6 +367,8 @@ def normalize_script(script: list[dict]) -> list[dict]:
         spoken = (entry.get("voice_text") or "").strip()
         if spoken:
             line["voice_text"] = spoken
+        if entry.get("silent"):
+            line["silent"] = True
         normalized.append(line)
     return normalized
 

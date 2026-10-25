@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lib  # noqa: E402
 
-TEMPLATES = {"official"}
+TEMPLATES = {"official", "who-is-the-spy"}
 
 SUBDIRS = [
     "audio",

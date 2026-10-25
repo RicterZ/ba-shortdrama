@@ -164,8 +164,11 @@ def check_script_and_board(
             report.error(f"镜头 id 重复：{sid}")
         shot_ids.add(sid)
         line_ids = shot.get("lines") or []
-        if not line_ids:
-            report.error(f"镜头 {sid} 没有引用台词")
+        if not line_ids and not shot.get("durationInFrames"):
+            report.error(f"镜头 {sid} 没有引用台词，也没有 durationInFrames")
+        if not line_ids and shot.get("durationInFrames"):
+            if int(shot["durationInFrames"]) <= 0:
+                report.error(f"镜头 {sid} 的 durationInFrames 必须为正整数")
         flat.extend(line_ids)
         for entry in shot.get("characters") or []:
             cid = entry.get("id")
@@ -177,7 +180,7 @@ def check_script_and_board(
                 report.error(f"镜头 {sid} 的角色 {cid} 引用了不存在的服装 {outfit!r}")
             if not 0.0 <= float(entry.get("x", 0.5)) <= 1.0:
                 report.error(f"镜头 {sid} 角色 {cid} 的 x 必须在 0 到 1 之间")
-            if not 0.0 <= float(entry.get("height", lib.DEFAULT_CHARACTER_HEIGHT)) <= 1.5:
+            if not 0.0 <= float(entry.get("height", lib.DEFAULT_CHARACTER_HEIGHT)) <= 3.0:
                 report.error(f"镜头 {sid} 角色 {cid} 的 height 超出合理范围")
 
         scene_ref = shot.get("scene")
@@ -272,6 +275,8 @@ def check_timing(
         if start < previous_end:
             report.error(f"台词 {line.get('id')} 与上一句时间重叠")
         previous_end = start + frames
+        if not line.get("audio"):
+            continue
         if not audio.is_file():
             report.error(f"台词 {line.get('id')} 的音频不存在：{audio}")
             continue
@@ -355,7 +360,7 @@ def check_scene(
             if int(line.get("from", 0)) < start + overlap:
                 report.error(f"台词 {line.get('id')} 在镜头 {shot.get('id')} 的转场窗口内开始")
             audio = raws / str(line.get("audio", ""))
-            if not audio.is_file():
+            if line.get("audio") and not audio.is_file():
                 report.error(f"台词 {line.get('id')} 的音频缺失：{audio}")
 
         choices = shot.get("choices")
@@ -381,11 +386,7 @@ def check_scene(
         if not (raws / str(relative)).is_file():
             report.error(f"scene.ui.sfx.{key} 的音效文件不存在：{relative}")
 
-    bgm = scene.get("bgm")
-    if bgm:
-        relative = bgm.get("src")
-        if not relative or not (raws / str(relative)).is_file():
-            report.error(f"scene.bgm 的音频文件不存在：{relative}")
+    check_bgm(report, scene.get("bgm"), raws, int(scene["episode"]["durationInFrames"]))
 
     for cid, data in (scene.get("characters") or {}).items():
         outfits = data.get("outfits") or {}
@@ -432,7 +433,7 @@ def check_scene(
 
     if timing:
         for line in timing.get("lines") or []:
-            if not (raws / str(line.get("audio", ""))).is_file():
+            if line.get("audio") and not (raws / str(line.get("audio", ""))).is_file():
                 report.error(f"timing 中台词 {line.get('id')} 的音频缺失")
 
 
@@ -457,6 +458,21 @@ def check_lock(report: Report, episode: Path) -> None:
     for path in sorted(set(recorded) & set(actual)):
         if recorded[path] != actual[path]:
             report.error(f"素材哈希不一致：{path}")
+
+
+def check_bgm(report: Report, bgm: dict | None, raws: Path, total: int) -> None:
+    if not bgm:
+        return
+    for track in [bgm, *(bgm.get("cues") or [])]:
+        relative = track.get("src")
+        if not relative or not (raws / str(relative)).is_file():
+            report.error(f"scene.bgm 的音频文件不存在：{relative}")
+    for kind in ("muteRanges", "cues"):
+        for item in bgm.get(kind) or []:
+            start, length = item.get("from"), item.get("durationInFrames")
+            if (type(start) is not int or type(length) is not int
+                    or start < 0 or length <= 0 or start + length > total):
+                report.error(f"scene.bgm.{kind} 的时间范围无效：{item}")
 
 
 def check_output(report: Report, episode: Path, scene: dict | None) -> None:

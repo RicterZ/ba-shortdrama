@@ -36,8 +36,8 @@ class MediaTests(unittest.TestCase):
                 with patch.dict(os.environ, {"PATH": ""}):
                     self.assertAlmostEqual(lib.probe_duration(self.path), 5)
                     voice.trim_silence(self.path)
-                    # Matches the former CLI filter: detection + retained silence.
-                    self.assertAlmostEqual(lib.probe_duration(self.path), 2.9, delta=0.1)
+                    # Keep the short-drama trim's 80 ms protection at both edges.
+                    self.assertAlmostEqual(lib.probe_duration(self.path), 3.06, delta=0.05)
                 with av.open(str(self.path)) as audio:
                     self.assertEqual(audio.streams.audio[0].codec_context.channels, channels)
                     self.assertGreater(sum(frame.samples for frame in audio.decode(audio=0)), 0)

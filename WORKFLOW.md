@@ -35,7 +35,7 @@ cd code/ba-production
 npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-momoi
 ```
 
-`episode.yaml` 的 `template` 选择渲染模板，默认 `official`；新建集数可用 `--template official` 指定。模板入口位于 `templates/<模板 id>/index.tsx`，当前只有 `templates/official/index.tsx`。`width` / `height` / `fps` 是画幅与帧率配置，例如竖屏可用 `--width 720 --height 1280`。模板决定视觉呈现，画幅尺寸由集数配置决定。新建的剧集默认带 `transitions` 块（场景切换加 12 帧 fade），规则见下面「转场」。
+`episode.yaml` 的 `template` 选择渲染模板，默认 `official`；新建集数可用 `--template official` 指定。模板入口位于 `templates/<模板 id>/index.tsx`，当前有 `templates/official/index.tsx`（实机风格）和 `templates/who-is-the-spy/index.tsx`（谁是卧底：词牌、聚光灯、大字幕、投票字）。`width` / `height` / `fps` 是画幅与帧率配置，例如竖屏可用 `--width 720 --height 1280`。模板决定视觉呈现，画幅尺寸由集数配置决定。新建的剧集默认带 `transitions` 块（场景切换加 12 帧 fade），规则见下面「转场」。
 
 生成 `videos/003-summer-patch/` 骨架和空白的 `script.json`、`storyboard.json`。填完后才能准备。
 
@@ -127,6 +127,68 @@ publication_approved: false
 - `episode.yaml` 的 `ui` 块可以覆盖 UI 音效（`click` / `select` / `hover` 对应 `data/ui/sfx/<name>.wav`）、关闭逐句点击音（`lineClick: false`）或调整音量（`lineClickVolume`）。不写时使用默认三件套。
 - 台词按镜头顺序连续排布；切镜点由 `timing` 参数自动决定，不需要手写帧号。
 
+### 谁是卧底模板
+
+`episode.yaml` 里写 `template: who-is-the-spy`，并在 `style.caption_style` 写 `meme`。它沿用通用分镜字段，另外认这些演出声明：
+
+#### 玩法与脚本结构
+
+这是模板默认的剧作约定，不是引擎强制规则，但写分镜时按它组织最省事：
+
+- **词**：平民一个词，卧底一个相近的词。卧底在“暴言”之前不知道自己身份，暴言之后才意识到。
+- **发言**：每人一句关于自己词的线索，不能直接说出词。固定顺序（例如小桃 → 小绿 → 优香 → 凯伊），一人一轮。
+- **对话**：追问、吐槽、接话。可以有，但不占轮次；对话结束后回到原来的发言顺序。
+- **暴言**：卧底说一句自己觉得很正常、但让平民震惊的话；这是全片的转折点，之后接反应特写。
+- **位置轮**：暴言之后可以再来一轮“用在哪里/怎么用”，每人一句；卧底可以沉默。
+- **投票**：系统语音报“发言结束，开始投票”，人物身上出 `voteTags`；得票最多者出局。平民投出卧底＝平民胜，否则卧底胜。
+- **心理**：`monologue` 不是台词，不进 `script.json`，不占发言轮次，只作为镜头内的无声/有声独白。
+
+`script.json` 只放**发言**和**对话**；心理、投票字、系统语音、反应特写都在 `storyboard.json` 里声明。`lines` 不区分“发言/对话”，按数组顺序就是播出顺序。
+
+#### 分镜字段
+
+- `characters[].label`：`{ "text": "按摩仪", "tone": "normal" | "secret", "rotate": -3 }`，头顶词牌。
+- `shot.focus`：聚光灯角色 id。只在没有台词的镜头生效，和“发言时说话人高亮”是两套东西。
+- `shot.monologue`：`{ "speaker": "...", "text": "...", "audio": "audio/thought.wav" }`，心理字幕；镜头没有台词时整段显示。`audio` 可省略，省略时才调用角色 TTS；提供时使用该录音（路径相对工作区或本集目录），并按实测时长扩展反应镜头。
+- `shot.voteTags`：`[{ "speaker": "...", "text": "凯伊" }]`，人物身上的投票字。
+- 无台词镜头：`"lines": []` 加 `durationInFrames`。prepare 会在该镜头处插入等长静默，并把后面的台词整体后移；开场词牌、反应特写、沉默拍都这么写。末尾无台词镜头不再额外追加 `outro_frames`，以声明时长结束；转场 padding 仍按通用规则另计。
+- 发言镜头保持全彩、静态镜头；`focus` 只负责内心/反应镜头的压暗和柔光。
+
+#### BGM 切换
+
+`episode.yaml` 的 `bgm` 是常驻官方 BGM；`mute` 按镜头区间静音，`cues` 叠加替换曲：
+
+```yaml
+bgm:
+  file: data/audio/bgm/0005-colorful-mess.ogg
+  volume: 0.13
+  mute:
+    - { from: S3, to: C3 }          # 震惊段：官方 BGM 静音
+    - { from: S6, atLine: L21 }     # 凯伊跑走：静音到本镜结束
+  cues:
+    - { from: S6, atLine: L21, file: data/audio/bgm/0007-unwelcome-school.ogg, volume: 0.5 }
+```
+
+- `from` / `to` 是镜头 id；`to` 省略时等于 `from`，范围含 `to` 镜头结尾。
+- `atLine` 可选，把起点对齐到该镜头内某句台词；`offsetFrames` 在它之后再延迟 N 帧。
+- `mute` 是硬静音；`resumeFadeFrames` 可以给恢复加淡入（默认 0，即不做淡入淡出）。
+- `cues` 不会自动静音常驻 BGM，需要同时写 `mute`。
+- 路径相对工作区或本集目录，prepare 会复制进独立的 `raws/audio/bgm/`，常驻曲和每个 cue 使用不同文件名，不覆盖对白或其他曲目。修改配置后重新 prepare；validate 会检查 cue 文件和时间范围。
+- 静音区间使用全片帧号，BGM 循环不会重置静音时间；恢复淡入遇到下一段静音时仍以静音为准。
+
+```json
+{
+  "id": "C1",
+  "scene": "game-dev-room",
+  "durationInFrames": 24,
+  "focus": "saiba-momoi",
+  "characters": [
+    { "id": "saiba-momoi", "outfit": "winter", "x": 0.5, "bottom": -1.15, "height": 2.1, "emotion": "shocked" }
+  ],
+  "lines": []
+}
+```
+
 ### 转场
 
 转场由官方 `@remotion/transitions` 渲染，帧号和 padding 全部由 prepare 计算，分镜只需要声明效果。
@@ -198,7 +260,7 @@ publication_approved: false
 "bgm": { "file": "data/audio/bgm/0003-mischievous-step.ogg", "volume": 0.16, "loop": true, "fadeInFrames": 60, "fadeOutFrames": 90 }
 ```
 
-`file` 相对工作区根目录；prepare 会把它复制到 `raws/audio/` 并写入 `scene.bgm`，Remotion 在整片期间循环播放，按 `fadeInFrames` / `fadeOutFrames` 淡入淡出，音量为 `volume`。不写 `bgm` 就没有背景音乐。
+`file` 相对工作区根目录（也可相对本集目录）；prepare 会把它复制到 `raws/audio/bgm/` 并写入 `scene.bgm`，Remotion 在整片期间循环播放，按 `fadeInFrames` / `fadeOutFrames` 淡入淡出，音量为 `volume`。不写 `bgm` 就没有背景音乐。
 
 ## 4. 准备
 

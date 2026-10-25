@@ -357,8 +357,8 @@ def trim_silence(path: Path) -> None:
     """Trim edge silence and cap overlong internal pauses.
 
     Vocu community voices can leave multi-second gaps at commas and periods,
-    which reads as a broken delivery in a 3-minute sketch. Edge silence is
-    removed entirely; internal pauses use the existing silenceremove settings
+    which reads as a broken delivery in a 3-minute sketch. Edge silence retains
+    up to 80 ms to preserve consonant attacks; internal pauses use silenceremove
     (0.6s detection, 0.28s retained silence) so the beat stays without stalling.
     """
     tmp = path.with_suffix(".trim.mp3")
@@ -371,9 +371,9 @@ def trim_silence(path: Path) -> None:
             output.bit_rate = 96_000
             graph = av.filter.Graph()
             buffer = graph.add_abuffer(template=audio)
-            leading = graph.add("silenceremove", "start_periods=1:start_duration=0:start_threshold=-45dB")
+            leading = graph.add("silenceremove", "start_periods=1:start_duration=0:start_silence=0.08:start_threshold=-50dB")
             reverse = graph.add("areverse")
-            trailing = graph.add("silenceremove", "start_periods=1:start_duration=0:start_threshold=-45dB")
+            trailing = graph.add("silenceremove", "start_periods=1:start_duration=0:start_silence=0.08:start_threshold=-50dB")
             restore = graph.add("areverse")
             pauses = graph.add("silenceremove", "stop_periods=-1:stop_duration=0.6:stop_threshold=-40dB:stop_silence=0.28")
             sink = graph.add("abuffersink")

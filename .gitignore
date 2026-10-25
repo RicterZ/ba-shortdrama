@@ -2,10 +2,12 @@
 /attachments/
 /carocut/
 /code/ba-production/local/
-/data/
+/data/*
+!/data/.gitkeep
 /local/
 /temp/
-/videos/
+/videos/*
+!/videos/.gitkeep
 .cache/
 .DS_Store
 node_modules

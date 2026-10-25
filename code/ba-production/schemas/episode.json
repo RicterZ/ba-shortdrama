@@ -31,7 +31,7 @@
     },
     "template": {
       "type": "string",
-      "enum": ["official"]
+      "enum": ["official", "who-is-the-spy", "blue-archive"]
     },
     "fps": {
       "type": "integer",
@@ -93,6 +93,39 @@
         "fadeOutFrames": {
           "type": "integer",
           "minimum": 0
+        },
+        "resumeFadeFrames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mute": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from"],
+            "properties": {
+              "from": {"type": "string"},
+              "to": {"type": "string"},
+              "atLine": {"type": "string"},
+              "offsetFrames": {"type": "integer", "minimum": 0}
+            }
+          }
+        },
+        "cues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "file"],
+            "properties": {
+              "from": {"type": "string"},
+              "to": {"type": "string"},
+              "atLine": {"type": "string"},
+              "offsetFrames": {"type": "integer", "minimum": 0},
+              "file": {"type": "string"},
+              "volume": {"type": "number", "minimum": 0, "maximum": 1},
+              "loop": {"type": "boolean"}
+            }
+          }
         }
       }
     },
