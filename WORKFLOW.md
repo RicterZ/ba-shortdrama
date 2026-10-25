@@ -65,6 +65,7 @@ publication_approved: false
 ```
 
 - `id` 可省略，默认 `L1`、`L2`……
+- `kind`（可选）：`speech`（默认）或 `thought`（心理独白）；两者统一参与配音、时间轴和覆盖检查。`silent: true` 只显示字幕、不合成音频。
 - `speaker` 必须是 `episode.yaml` 的 `characters` 之一。
 - `voice_text`（可选）：真正送去语音合成的台词；省略时用 `text`。外语配音、中文字幕时把两者分开写（`text` 显示在屏幕上，`voice_text` 只用来配音），字幕长度校验只看 `text`。
 - `emotion` 只是演出意图；有对应表情立绘时换图，没有时回退到该套装的 `default` 立绘并打印警告。静止时不做呼吸、说话抖动等程序化微动；需要动作时在分镜里写 `motion`。
@@ -141,15 +142,15 @@ publication_approved: false
 - **暴言**：卧底说一句自己觉得很正常、但让平民震惊的话；这是全片的转折点，之后接反应特写。
 - **位置轮**：暴言之后可以再来一轮“用在哪里/怎么用”，每人一句；卧底可以沉默。
 - **投票**：系统语音报“发言结束，开始投票”，人物身上出 `voteTags`；得票最多者出局。平民投出卧底＝平民胜，否则卧底胜。
-- **心理**：`monologue` 不是台词，不进 `script.json`，不占发言轮次，只作为镜头内的无声/有声独白。
+- **心理**：写在 `script.json` 的 `kind: "thought"` 行，不占发言轮次，默认配音；`silent: true` 时只显示心理字幕。
 
-`script.json` 只放**发言**和**对话**；心理、投票字、系统语音、反应特写都在 `storyboard.json` 里声明。`lines` 不区分“发言/对话”，按数组顺序就是播出顺序。
+`script.json` 放**发言**、**对话**和**心理独白**；投票字、系统语音、反应特写在 `storyboard.json` 里声明。`lines` 不区分“发言/对话”，按数组顺序就是播出顺序。
 
 #### 分镜字段
 
 - `characters[].label`：`{ "text": "按摩仪", "tone": "normal" | "secret", "rotate": -3 }`，头顶词牌。
-- `shot.focus`：聚光灯角色 id。只在没有台词的镜头生效，和“发言时说话人高亮”是两套东西。
-- `shot.monologue`：`{ "speaker": "...", "text": "...", "audio": "audio/thought.wav" }`，心理字幕；镜头没有台词时整段显示。`audio` 可省略，省略时才调用角色 TTS；提供时使用该录音（路径相对工作区或本集目录），并按实测时长扩展反应镜头。
+- `shot.focus`：聚光灯角色 id。在 thought 行或没有台词的镜头生效，和“发言时说话人高亮”是两套东西。
+- 心理字幕：在 `script.json` 写 `{ "id": "M1", "speaker": "saiba-momoi", "kind": "thought", "text": "声音大……为什么要脸红？" }`；分镜写 `{ "id": "S1T", "lines": ["M1"], "focus": "saiba-momoi", "characters": [...] }`。音频沿用 `S1T-M1.mp3`，支持 `--reuse-audio`；时长按音频计算，不写 `durationInFrames`。旧 `shot.monologue` 会报错，必须迁移。
 - `shot.voteTags`：`[{ "speaker": "...", "text": "凯伊" }]`，人物身上的投票字。
 - 无台词镜头：`"lines": []` 加 `durationInFrames`。prepare 会在该镜头处插入等长静默，并把后面的台词整体后移；开场词牌、反应特写、沉默拍都这么写。末尾无台词镜头不再额外追加 `outro_frames`，以声明时长结束；转场 padding 仍按通用规则另计。
 - 发言镜头保持全彩、静态镜头；`focus` 只负责内心/反应镜头的压暗和柔光。

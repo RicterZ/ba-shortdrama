@@ -389,6 +389,7 @@ def build_shots(
             shot_lines.append(
                 {
                     "id": line["id"],
+                    "kind": line.get("kind", "speech"),
                     "speaker": line["speaker"],
                     "outfit": line["outfit"],
                     "emotion": line["emotion"],
@@ -547,7 +548,6 @@ def build_shots(
                 "background": background,
                 "camera": raw.get("camera", "static"),
                 "focus": raw.get("focus"),
-                "monologue": raw.get("monologue"),
                 "voteTags": raw.get("voteTags"),
                 "systemVoice": raw.get("systemVoice"),
                 "characters": characters,
@@ -583,29 +583,6 @@ def resolve_audio_source(value: str, episode: Path) -> Path:
     return source
 
 
-def prepare_monologues(board: list[dict], characters: dict, episode: Path, fps: int,
-                       reuse_audio: bool, timeout: int, allow_fallback: bool) -> dict[str, Path]:
-    files = {}
-    for shot in board:
-        mono = shot.get("monologue")
-        if not mono:
-            continue
-        speaker = mono.get("speaker")
-        if speaker not in characters:
-            raise SystemExit(f"镜头 {shot['id']} 的 monologue.speaker={speaker!r} 不在 episode.characters 中")
-        if mono.get("audio"):
-            target = resolve_audio_source(mono["audio"], episode)
-        else:
-            target = episode / "audio" / f"mono-{shot['id']}.mp3"
-            if not (reuse_audio and target.is_file()):
-                voice.synthesize_line(mono.get("text", ""), characters[speaker]["voice"],
-                                      target, timeout, allow_fallback)
-        needed = math.ceil(lib.probe_duration(target) * fps) + 12
-        shot["durationInFrames"] = max(int(shot.get("durationInFrames") or 0), needed)
-        files[shot["id"]] = target
-    return files
-
-
 def reaction_gaps(board: list[dict]) -> tuple[int, dict[str, int]]:
     leading = 0
     gaps = {}
@@ -620,24 +597,17 @@ def reaction_gaps(board: list[dict]) -> tuple[int, dict[str, int]]:
     return leading, gaps
 
 
-def snapshot_shot_audio(shots: list[dict], monologue_files: dict[str, Path],
-                        episode: Path, raws: Path) -> None:
+def snapshot_shot_audio(shots: list[dict], episode: Path, raws: Path) -> None:
     for index, shot in enumerate(shots):
-        sources = []
-        if shot.get("systemVoice"):
-            sources.append(("system", resolve_audio_source(shot["systemVoice"], episode)))
-        if shot.get("monologue"):
-            sources.append(("monologue", monologue_files[shot["id"]]))
-        for kind, source in sources:
-            relative = f"audio/{kind}/{index:03d}{source.suffix}"
-            target = raws / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if source.resolve() != target.resolve():
-                shutil.copy2(source, target)
-            if kind == "system":
-                shot["systemVoice"] = relative
-            else:
-                shot["monologue"]["audio"] = relative
+        if not shot.get("systemVoice"):
+            continue
+        source = resolve_audio_source(shot["systemVoice"], episode)
+        relative = f"audio/system/{index:03d}{source.suffix}"
+        target = raws / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if source.resolve() != target.resolve():
+            shutil.copy2(source, target)
+        shot["systemVoice"] = relative
 
 
 def prepare_bgm(bgm_cfg: dict | None, shots: list[dict], episode: Path, raws: Path) -> dict | None:
@@ -786,10 +756,6 @@ def main() -> int:
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
-    monologue_files = prepare_monologues(
-        board, characters, episode, fps, args.reuse_audio,
-        args.voice_timeout, args.voice_fallback,
-    )
     leading_frames, line_gaps = reaction_gaps(board)
 
     timed, total_frames, providers = build_timing(
@@ -851,7 +817,7 @@ def main() -> int:
 
     scene_bgm = prepare_bgm(config.get("bgm"), shots, episode, raws)
 
-    snapshot_shot_audio(shots, monologue_files, episode, raws)
+    snapshot_shot_audio(shots, episode, raws)
 
     # Scene backgrounds are supplied by the owner; copy them into the episode snapshot.
     seen_scenes: set[int] = set()

@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import lib
 import prepare
+import validate
 
 
 class ReactionTimingTest(unittest.TestCase):
@@ -89,48 +90,74 @@ class ShotAudioTest(unittest.TestCase):
                 source.write_bytes(f"system-{i}".encode())
                 sources.append(source)
             shots = [{"id": f"S{i}", "systemVoice": str(source)} for i, source in enumerate(sources)]
-            prepare.snapshot_shot_audio(shots, {}, root, raws)
+            prepare.snapshot_shot_audio(shots, root, raws)
             self.assertEqual(dialogue.read_bytes(), b"dialogue")
             self.assertNotEqual(shots[0]["systemVoice"], shots[1]["systemVoice"])
             for i, shot in enumerate(shots):
                 self.assertEqual((raws / shot["systemVoice"]).read_bytes(), f"system-{i}".encode())
 
-    def test_custom_monologue_audio_skips_tts_and_extends_reaction(self):
+class ThoughtLineTest(unittest.TestCase):
+    def test_thought_synthesis_reuse_silent_and_timing(self):
+        script = lib.normalize_script([
+            {"id": "M1", "speaker": "c", "kind": "thought", "text": "Thinking"},
+            {"id": "M2", "speaker": "c", "kind": "thought", "text": "Quiet", "silent": True},
+        ])
+        board = [{"id": "S1T", "lines": ["M1"]}, {"id": "S2T", "lines": ["M2"]}]
+        def synthesize(text, voice, target, timeout, fallback):
+            target.write_bytes(b"tts")
+            return {"provider": "test"}
         with tempfile.TemporaryDirectory() as tmp:
             episode = Path(tmp)
-            source = episode / "recording.wav"
-            source.write_bytes(b"approved voice")
-            shot = {"id": "S1", "lines": [], "durationInFrames": 30,
-                    "monologue": {"speaker": "c", "text": "thought", "audio": "recording.wav"}}
-            with patch.object(prepare.voice, "synthesize_line") as synth, patch.object(
-                lib, "probe_duration", return_value=2.0
-            ), patch.object(lib, "ROOT", episode / "missing-root"):
-                files = prepare.prepare_monologues([shot], {"c": {"voice": {}}}, episode, 30, False, 30, False)
-            synth.assert_not_called()
-            self.assertEqual(shot["durationInFrames"], 72)
-            prepare.snapshot_shot_audio([shot], files, episode, episode / "raws")
-            self.assertEqual((episode / "raws" / shot["monologue"]["audio"]).read_bytes(), source.read_bytes())
-
-    def test_missing_custom_audio_does_not_fall_back_to_paid_tts(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.object(prepare.voice, "synthesize_line") as synth:
-            shot = {"id": "S1", "monologue": {"speaker": "c", "text": "thought", "audio": "missing.wav"}}
-            with self.assertRaises(SystemExit):
-                prepare.prepare_monologues([shot], {"c": {"voice": {}}}, Path(tmp), 30, False, 30, False)
-            synth.assert_not_called()
-
-    def test_unprovided_monologue_audio_synthesizes_and_reuses(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            episode = Path(tmp)
-            shot = {"id": "S1", "monologue": {"speaker": "c", "text": "thought"}}
-            def synthesize(text, voice, target, timeout, fallback):
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(b"tts")
             with patch.object(prepare.voice, "synthesize_line", side_effect=synthesize) as synth, patch.object(
-                lib, "probe_duration", return_value=1.0
+                lib, "probe_duration", return_value=2.0
             ):
-                prepare.prepare_monologues([shot], {"c": {"voice": {}}}, episode, 30, False, 30, False)
-                prepare.prepare_monologues([shot], {"c": {"voice": {}}}, episode, 30, True, 30, False)
-                self.assertEqual(synth.call_count, 1)
+                for reuse in (False, True):
+                    timed, _, providers = prepare.build_timing(
+                        script, {"c": {"default_outfit": "default", "voice": {}}}, {},
+                        episode, 30, lib.DEFAULT_TIMING, reuse, 30, False, board=board,
+                    )
+                    self.assertEqual(providers["silent"], 1)
+                synth.assert_called_once()
+                self.assertEqual(synth.call_args.args[0], "Thinking")
+                self.assertEqual(synth.call_args.args[2].name, "S1T-M1.mp3")
+            shots, _, _ = prepare.build_shots(board, timed, lib.DEFAULT_TIMING, {}, {"c": "default"})
+            self.assertEqual(shots[0]["lines"][0]["kind"], "thought")
+            self.assertEqual(shots[0]["lines"][0]["audio"], "audio/S1T-M1.mp3")
+            self.assertEqual(shots[0]["lines"][0]["durationInFrames"], 60 + lib.DEFAULT_TIMING["tail_frames"])
+            self.assertEqual(shots[1]["lines"][0]["audio"], "")
+            self.assertFalse((episode / "audio/S2T-M2.mp3").exists())
+
+    def test_thought_coverage_and_legacy_rejection(self):
+        script = lib.normalize_script([{"id": "M1", "speaker": "c", "kind": "thought", "text": "Thought"}])
+        self.assertEqual(lib.dialogue_audio_names(script, [{"id": "S1T", "lines": ["M1"]}]),
+                         {"M1": "S1T-M1.mp3"})
+        for board, error in [([], "missing"),
+                             ([{"id": "S1T", "lines": ["M1", "M1"]}], "multiply"),
+                             ([{"id": "S1T", "lines": ["M1"], "monologue": None}], "script.json")]:
+            with self.subTest(board=board), self.assertRaisesRegex(ValueError, error):
+                lib.dialogue_audio_names(script, board)
+        report = validate.Report(Path("."))
+        validate.check_script_and_board(report, {}, script,
+                                        {"shots": [{"id": "S1T", "lines": ["M1"], "monologue": {}}]}, {})
+        self.assertTrue(any("monologue" in error for error in report.errors))
+
+    def test_kind_validation_and_default(self):
+        self.assertEqual(lib.normalize_script([{"text": "Speech"}])[0]["kind"], "speech")
+        for kind in ("invalid", None, 1):
+            with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, "kind"):
+                lib.normalize_script([{"text": "Thought", "kind": kind}])
+
+    def test_missing_voiced_thought_audio_is_error_but_silent_skips(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            episode = Path(tmp)
+            (episode / "audio").mkdir()
+            lib.write_json(episode / "audio/timing.json", {
+                "lines": [{"id": "M1", "start": 0, "frames": 60, "audio": ""}],
+            })
+            for silent in (False, True):
+                report = validate.Report(episode)
+                validate.check_timing(report, episode, {}, [{"id": "M1", "kind": "thought", "silent": silent}], None)
+                self.assertEqual(bool(report.errors), not silent)
 
 
 if __name__ == "__main__":

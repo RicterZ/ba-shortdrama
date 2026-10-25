@@ -20,22 +20,23 @@ style:
 - **对话**：追问、吐槽、接话，不占轮次；对话结束回到原发言顺序。
 - **暴言**：卧底自认为正常、但让平民震惊的一句；之后接三连反应特写。
 - **投票**：系统语音 + `voteTags`，得票最多者出局；投出卧底平民胜，否则卧底胜。
-- **心理**：`monologue` 不是台词，不进 `script.json`，不占轮次。
+- **心理**：写在 `script.json`，用 `kind: "thought"` 标记，不占轮次。
 
-`script.json` 只放发言和对话；心理、投票、系统语音、反应镜头都在 `storyboard.json` 里。
+`script.json` 放发言、对话和心理独白；投票、系统语音、反应镜头在 `storyboard.json` 里。
 
 ## 分镜字段
 
 | 字段 | 位置 | 作用 |
 |---|---|---|
 | `label` | 角色 | 头顶词牌：`{ text, tone: normal\|secret }` |
-| `focus` | 镜头 | 聚光灯角色 id；只在没有台词的镜头生效 |
-| `monologue` | 镜头 | 心理字幕：`{ speaker, text, audio? }`，提供 audio 时直接使用录音，否则调用角色 TTS |
+| `focus` | 镜头 | 聚光灯角色 id；在 thought 行或没有台词的镜头生效 |
+| `kind` | script 行 | `speech`（默认）或 `thought`；thought 只显示心理字幕、不显示底部字幕或说话人高亮 |
+| `silent` | script 行 | `true` 时只显示字幕、不合成；thought 默认配音 |
 | `voteTags` | 镜头 | 人物身上的投票字：`[{ speaker, text }]` |
 | `systemVoice` | 镜头 | 镜头开头的系统语音，例如“发言结束，开始投票”，不显示字幕 |
 | `durationInFrames` | 镜头 | 无台词镜头的固定长度 |
 
-投票、聚光灯、心理字幕是**分开的镜头**：投票镜头只有 `voteTags` 和 `systemVoice`；心理镜头才写 `focus` 和 `monologue`。
+投票、聚光灯、心理字幕是**分开的镜头**：投票镜头只有 `voteTags` 和 `systemVoice`；心理镜头写 `focus` 和 `lines: ["M1"]`，独白文本只写在 script 中。
 
 ## BGM
 
@@ -58,7 +59,7 @@ bgm:
 
 小桃、小绿、优香的词是「西瓜」，凯伊是「南瓜」。
 
-`S1` 发言；`S2` 投票，只有投票字和系统语音；`S3` 凯伊的聚光灯内心；`S4` 贴脸反应。
+`S1` 发言；`S2` 投票，只有投票字和系统语音；`S3T` 凯伊的聚光灯内心；`S4` 贴脸反应。
 
 ```json
 {
@@ -96,19 +97,17 @@ bgm:
       "lines": []
     },
     {
-      "id": "S3",
+      "id": "S3T",
       "scene": "game-dev-room",
       "camera": "static",
-      "durationInFrames": 56,
       "focus": "tendou-kei",
-      "monologue": { "speaker": "tendou-kei", "text": "……他们说的，好像不是南瓜。" },
       "characters": [
         { "id": "saiba-momoi", "outfit": "winter", "x": 0.10, "bottom": -0.12, "height": 0.80, "emotion": "calm" },
         { "id": "saiba-midori", "outfit": "winter", "x": 0.33, "bottom": -0.12, "height": 0.80, "emotion": "calm" },
         { "id": "hayase-yuuka", "outfit": "pajama", "x": 0.60, "bottom": -0.12, "height": 0.80, "emotion": "calm" },
         { "id": "tendou-kei", "outfit": "unarmed", "x": 0.90, "bottom": -0.12, "height": 0.84, "emotion": "blush" }
       ],
-      "lines": []
+      "lines": ["M1"]
     },
     {
       "id": "S4",
@@ -132,7 +131,8 @@ bgm:
   { "id": "L1", "speaker": "saiba-momoi", "emotion": "happy", "text": "它是绿的，外面有条纹。" },
   { "id": "L2", "speaker": "saiba-midori", "emotion": "calm", "text": "切开里面是红的。" },
   { "id": "L3", "speaker": "hayase-yuuka", "emotion": "calm", "text": "夏天吃最解渴。" },
-  { "id": "L4", "speaker": "tendou-kei", "emotion": "default", "text": "……它是橙色的，里面也是橙色的。" }
+  { "id": "L4", "speaker": "tendou-kei", "emotion": "default", "text": "……它是橙色的，里面也是橙色的。" },
+  { "id": "M1", "speaker": "tendou-kei", "kind": "thought", "emotion": "blush", "text": "……他们说的，好像不是南瓜。" }
 ]
 ```
 
@@ -150,7 +150,9 @@ uv run python -c "import asyncio, edge_tts; asyncio.run(edge_tts.Communicate('�
 
 - 无台词镜头由 prepare 自动留出静默时间，后面的台词整体后移。
 - 开头连续的无台词镜头同样保留完整时长；末尾无台词镜头以声明时长结束，不额外追加 outro。转场 padding 另计。
-- `monologue.audio` 和 `systemVoice` 的源路径相对工作区或本集目录；快照按镜头分别保存，不会因源文件同名覆盖对白或其他镜头音频。
+- thought 和 speech 共用配音、覆盖检查、时间轴与 `--reuse-audio`，音频按 shot-line 命名，例如 `S3T-M1.mp3`，不用手写镜头时长。
+- 旧 `shot.monologue` 已停用，prepare/validate 会提示迁移到 script 的 thought 行。
+- `systemVoice` 的源路径相对工作区或本集目录，快照按镜头分别保存。
 - `focus` 是内心/反应镜头的压暗，不是发言高亮。
 - 投票字按角色主题色和画幅高度计算。
 - 需要气泡时仍按通用规则写 `bubbles`；没有登记 spine 的角色不能使用气泡。

@@ -70,26 +70,7 @@
           },
           "focus": {
             "type": "string",
-            "description": "聚光灯角色 id；只在没有台词的心理/反应镜头里生效。"
-          },
-          "monologue": {
-            "type": "object",
-            "required": [
-              "speaker",
-              "text"
-            ],
-            "properties": {
-              "speaker": {
-                "type": "string"
-              },
-              "text": {
-                "type": "string"
-              },
-              "audio": {
-                "type": "string",
-                "description": "可选；不写时 prepare 用 speaker 的音色合成。"
-              }
-            }
+            "description": "聚光灯角色 id；在 thought 行或无台词反应镜头里生效。"
           },
           "voteTags": {
             "type": "array",
