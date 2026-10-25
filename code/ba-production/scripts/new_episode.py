@@ -89,7 +89,7 @@ def main() -> int:
             "subtitle": args.intro_subtitle,
         }
 
-    lib.write_json(episode / "episode.yaml", config)
+    lib.write_yaml(episode / "episode.yaml", config)
     lib.write_json(episode / "script.json", [])
     lib.write_json(episode / "storyboard.json", {"shots": []})
     lib.write_json(

@@ -39,6 +39,22 @@ npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-mom
 
 生成 `videos/003-summer-patch/` 骨架和空白的 `script.json`、`storyboard.json`。填完后才能准备。
 
+`episode.yaml` 支持普通 YAML（旧的 JSON 写法也兼容），直接在顶层选择模板：
+
+```yaml
+id: 003-summer-patch
+title: 夏日补丁
+template: official
+characters:
+  - saiba-momoi
+width: 1280
+height: 720
+fps: 30
+publication_approved: false
+```
+
+新建剧集会直接生成 YAML 格式的配置。已有剧集修改 `template` 后重新运行 `ep:prepare`（可加 `--reuse-audio`），再渲染；渲染读取 prepare 生成的 `project/scene.json`，不会直接读取 YAML。当前台词仍写在 `script.json`，分镜写在 `storyboard.json`，模板选择属于整集配置，不是单句台词字段。
+
 ## 2. 写台词 `script.json`
 
 ```json

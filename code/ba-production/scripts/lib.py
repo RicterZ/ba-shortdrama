@@ -7,6 +7,22 @@ import os
 import re
 from pathlib import Path
 
+import yaml
+
+
+class ConfigLoader(yaml.SafeLoader):
+    pass
+
+
+# Keep keys such as transitions.on as strings, not YAML 1.1 booleans.
+ConfigLoader.yaml_implicit_resolvers = {
+    key: [(tag, pattern) for tag, pattern in resolvers if tag != "tag:yaml.org,2002:bool"]
+    for key, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+ConfigLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool", re.compile(r"^(?:true|false|True|False|TRUE|FALSE)$"), list("tTfF")
+)
+
 ROOT = Path(__file__).resolve().parents[3]
 VIDEOS = ROOT / "videos"
 CHARACTERS = ROOT / "data" / "characters"
@@ -84,8 +100,17 @@ VIDEO_EXTS = {".mp4", ".webm", ".mov"}
 
 
 def load_json(path: Path):
+    """Read JSON artifacts or YAML configuration (including legacy JSON syntax)."""
     with Path(path).open(encoding="utf-8") as f:
+        if Path(path).suffix.lower() in {".yaml", ".yml"}:
+            return yaml.load(f, Loader=ConfigLoader)
         return json.load(f)
+
+
+def write_yaml(path: Path, obj) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(obj, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
 
 def write_json(path: Path, obj) -> None:
