@@ -16,15 +16,14 @@ import argparse
 import asyncio
 import json
 import logging
-import os
 import re
-import subprocess
 import sys
 import tempfile
 import time
 import urllib.parse
 from pathlib import Path
 
+import av
 import edge_tts
 import requests
 
@@ -358,60 +357,53 @@ def trim_silence(path: Path) -> None:
     """Trim edge silence and cap overlong internal pauses.
 
     Vocu community voices can leave multi-second gaps at commas and periods,
-    which reads as a broken delivery in a 3-minute sketch. Edge silence is
-    removed entirely; internal pauses longer than 0.6s are shortened to 0.28s
-    so the beat stays without stalling.
-
-    Remotion ships a stripped ffmpeg without `silenceremove`; in that case the
-    original audio is kept and a warning is logged instead of failing the take.
+    which reads as a broken delivery in a 3-minute sketch. Edge silence retains
+    up to 80 ms to preserve consonant attacks; internal pauses use silenceremove
+    (0.6s detection, 0.28s retained silence) so the beat stays without stalling.
     """
-    import shutil
-
-    explicit = os.environ.get("FFMPEG")
-    if explicit:
-        ffmpeg = explicit
-    else:
-        ffmpeg = shutil.which("ffmpeg")
-        if not ffmpeg:
-            try:
-                import imageio_ffmpeg
-
-                ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
-            except Exception:  # noqa: BLE001
-                ffmpeg = None
-        if not ffmpeg:
-            probe = Path(lib.ffprobe_bin())
-            sibling = probe.with_name("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
-            ffmpeg = str(sibling) if sibling.is_file() else "ffmpeg"
     tmp = path.with_suffix(".trim.mp3")
     try:
-        subprocess.run(
-            [
-                ffmpeg,
-                "-y",
-                "-loglevel",
-                "error",
-                "-i",
-                str(path),
-                "-af",
-                "silenceremove=start_periods=1:start_duration=0:start_silence=0.08:start_threshold=-50dB,"
-                "areverse,"
-                "silenceremove=start_periods=1:start_duration=0:start_silence=0.08:start_threshold=-50dB,"
-                "areverse,"
-                "silenceremove=stop_periods=-1:stop_duration=0.6:stop_threshold=-40dB:stop_silence=0.28",
-                "-c:a",
-                "libmp3lame",
-                "-b:a",
-                "96k",
-                str(tmp),
-            ],
-            check=True,
-        )
-    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-        log.warning("trim silence skipped (%s); keeping untrimmed audio", exc)
+        with av.open(str(path)) as source, av.open(str(tmp), "w") as target:
+            audio = source.streams.audio[0]
+            output = target.add_stream("libmp3lame", rate=audio.codec_context.sample_rate)
+            output.layout = "mono" if audio.codec_context.channels == 1 else "stereo"
+            output.codec_context.format = "fltp"
+            output.bit_rate = 96_000
+            graph = av.filter.Graph()
+            buffer = graph.add_abuffer(template=audio)
+            leading = graph.add("silenceremove", "start_periods=1:start_duration=0:start_silence=0.08:start_threshold=-50dB")
+            reverse = graph.add("areverse")
+            trailing = graph.add("silenceremove", "start_periods=1:start_duration=0:start_silence=0.08:start_threshold=-50dB")
+            restore = graph.add("areverse")
+            pauses = graph.add("silenceremove", "stop_periods=-1:stop_duration=0.6:stop_threshold=-40dB:stop_silence=0.28")
+            sink = graph.add("abuffersink")
+            graph.link_nodes(buffer, leading, reverse, trailing, restore, pauses, sink)
+            graph.configure()
+
+            def drain() -> None:
+                while True:
+                    try:
+                        frame = graph.pull()
+                    except (av.error.BlockingIOError, av.error.EOFError):
+                        break
+                    # The filters remove time; encode a contiguous audio timeline.
+                    frame.pts = None
+                    for packet in output.encode(frame):
+                        target.mux(packet)
+
+            for frame in source.decode(audio):
+                graph.push(frame)
+                drain()
+            graph.push(None)
+            drain()
+            for packet in output.encode(None):
+                target.mux(packet)
+        # Do not replace the source if the filters removed all audio.
+        if lib.probe_duration(tmp) <= 0:
+            raise ValueError(f"No audio remains after trimming: {path}")
+        tmp.replace(path)
+    finally:
         tmp.unlink(missing_ok=True)
-        return
-    tmp.replace(path)
 
 
 def synthesize_line(
