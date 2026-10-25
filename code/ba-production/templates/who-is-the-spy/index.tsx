@@ -2,6 +2,7 @@ import React from 'react';
 import {sampleActions} from '../character-actions.mjs';
 import {bubbleLayers, bubbleOpacity, bubbleGeometry} from '../bubbles.mjs';
 import bubblePresets from '../bubble-presets.json';
+import {characterState} from './character-state.mjs';
 import {
   AbsoluteFill,
   Audio,
@@ -389,11 +390,12 @@ const CharacterFigure: React.FC<{
   entry: Shot['characters'][number];
   data: CharacterData;
   activeLine?: Line;
+  highlightedSpeaker?: string;
   /** Emotion of this character's latest line at or before the current frame. */
   heldEmotion?: string;
   shadowColor: string;
   shotDuration: number;
-}> = ({ entry, data, activeLine, heldEmotion, shadowColor, shotDuration }) => {
+}> = ({ entry, data, activeLine, highlightedSpeaker, heldEmotion, shadowColor, shotDuration }) => {
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
   const action = sampleActions(entry.actions, frame, fps);
@@ -403,19 +405,9 @@ const CharacterFigure: React.FC<{
 
   const outfit = data.outfits[entry.outfit] || data.outfits[data.default_outfit];
   if (!outfit) return null;
-  const isSpeaking = activeLine?.speaker === entry.id;
-  const isDimmed = Boolean(activeLine) && !isSpeaking;
-  // Latest timed expression cue wins — it can interrupt a spoken line, e.g. a
-  // blush that lands one beat into a denial. Otherwise a speaking line's
-  // emotion, then the held emotion, then the shot's standing face.
-  let cued: string | undefined;
-  for (const cue of entry.emotionCues ?? []) {
-    if (frame >= cue.startFrame) cued = cue.emotion;
-  }
-  const spoken = isSpeaking
-    ? activeLine?.emotion || entry.emotion
-    : heldEmotion || entry.emotion;
-  const emotion = cued || spoken;
+  const {emotion, dimmed: isDimmed} = characterState(
+    entry, activeLine, highlightedSpeaker, heldEmotion, frame,
+  );
   const sprites = outfit.sprites || {};
   const sprite = sprites[emotion] || sprites.default;
   if (!sprite) return null;
@@ -1464,7 +1456,8 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
               <CharacterFigure
                 entry={entry}
                 data={scene.characters[entry.id]}
-                activeLine={displayLine}
+                activeLine={activeLine}
+                highlightedSpeaker={displayLine?.speaker}
                 heldEmotion={entry.holdEmotion ? heldEmotionFor(entry.id) : undefined}
                 shadowColor="rgba(20,30,45,0.22)"
                 shotDuration={shot.durationInFrames}

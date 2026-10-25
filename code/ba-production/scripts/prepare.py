@@ -137,6 +137,7 @@ def build_timing(
     allow_fallback: bool,
     intro_hold: int = 0,
     line_gaps: dict[str, int] | None = None,
+    leading_frames: int = 0,
 ) -> tuple[list[dict], int, dict]:
     gaps = line_gaps or {}
     audio_dir = episode / "audio"
@@ -146,7 +147,7 @@ def build_timing(
 
     # `intro_hold` is 0 when episode.yaml has no intro block, so deleting the
     # title card also drops the frames that used to sit under it.
-    cursor = intro_hold + timing_cfg["lead_in_frames"]
+    cursor = leading_frames + intro_hold + timing_cfg["lead_in_frames"]
     timed: list[dict] = []
     providers: dict[str, int] = {}
     for index, line in enumerate(script):
@@ -278,7 +279,7 @@ def build_shots(
                 previous_end += timing_cfg["shot_tail_frames"]
         else:
             previous_end = boundaries[index - 1] + int(previous["durationInFrames"])
-        if current.get("lines"):
+        if current.get("lines") and previous.get("lines"):
             first = by_id[current["lines"][0]]
             cut = max(previous_end, first["start"] - timing_cfg["shot_cut_lead_frames"])
             cut = min(cut, first["start"])
@@ -295,7 +296,7 @@ def build_shots(
         )
         total = max(total, end)
     else:
-        total = max(total, boundaries[-1] + int(last["durationInFrames"]))
+        total = boundaries[-1] + int(last["durationInFrames"])
     boundaries.append(total)
 
     # Resolve the scene of every shot up front: an automatic transition depends
@@ -565,6 +566,74 @@ def outfit_for_line(entry: dict, board: list[dict]) -> str:
     return ""
 
 
+def resolve_audio_source(value: str, episode: Path) -> Path:
+    source = Path(value)
+    if not source.is_absolute():
+        source = lib.ROOT / value
+        if not source.is_file():
+            source = episode / value
+    if not source.is_file():
+        raise SystemExit(f"音频文件不存在：{value}")
+    return source
+
+
+def prepare_monologues(board: list[dict], characters: dict, episode: Path, fps: int,
+                       reuse_audio: bool, timeout: int, allow_fallback: bool) -> dict[str, Path]:
+    files = {}
+    for shot in board:
+        mono = shot.get("monologue")
+        if not mono:
+            continue
+        speaker = mono.get("speaker")
+        if speaker not in characters:
+            raise SystemExit(f"镜头 {shot['id']} 的 monologue.speaker={speaker!r} 不在 episode.characters 中")
+        if mono.get("audio"):
+            target = resolve_audio_source(mono["audio"], episode)
+        else:
+            target = episode / "audio" / f"mono-{shot['id']}.mp3"
+            if not (reuse_audio and target.is_file()):
+                voice.synthesize_line(mono.get("text", ""), characters[speaker]["voice"],
+                                      target, timeout, allow_fallback)
+        needed = math.ceil(lib.probe_duration(target) * fps) + 12
+        shot["durationInFrames"] = max(int(shot.get("durationInFrames") or 0), needed)
+        files[shot["id"]] = target
+    return files
+
+
+def reaction_gaps(board: list[dict]) -> tuple[int, dict[str, int]]:
+    leading = 0
+    gaps = {}
+    last_line = None
+    for shot in board:
+        if shot.get("lines"):
+            last_line = shot["lines"][-1]
+        elif last_line is None:
+            leading += int(shot.get("durationInFrames") or 0)
+        else:
+            gaps[last_line] = gaps.get(last_line, 0) + int(shot.get("durationInFrames") or 0)
+    return leading, gaps
+
+
+def snapshot_shot_audio(shots: list[dict], monologue_files: dict[str, Path],
+                        episode: Path, raws: Path) -> None:
+    for index, shot in enumerate(shots):
+        sources = []
+        if shot.get("systemVoice"):
+            sources.append(("system", resolve_audio_source(shot["systemVoice"], episode)))
+        if shot.get("monologue"):
+            sources.append(("monologue", monologue_files[shot["id"]]))
+        for kind, source in sources:
+            relative = f"audio/{kind}/{index:03d}{source.suffix}"
+            target = raws / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if source.resolve() != target.resolve():
+                shutil.copy2(source, target)
+            if kind == "system":
+                shot["systemVoice"] = relative
+            else:
+                shot["monologue"]["audio"] = relative
+
+
 def main() -> int:
     args = parse_args()
 
@@ -608,48 +677,11 @@ def main() -> int:
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
-    # Inner monologue is voiced too. Synthesize it before the timeline so the
-    # reaction shot can grow to fit the clip instead of clipping the thought.
-    monologue_files: dict[str, Path] = {}
-    for shot in board:
-        mono = shot.get("monologue")
-        if not mono:
-            continue
-        speaker = mono.get("speaker")
-        if speaker not in characters:
-            raise SystemExit(
-                f"镜头 {shot['id']} 的 monologue.speaker={speaker!r} 不在 episode.characters 中"
-            )
-        target = episode / "audio" / f"mono-{shot['id']}.mp3"
-        if not (args.reuse_audio and target.is_file()):
-            voice.synthesize_line(
-                mono.get("text", ""),
-                characters[speaker]["voice"],
-                target,
-                args.voice_timeout,
-                args.voice_fallback,
-            )
-        seconds = lib.probe_duration(target)
-        needed = math.ceil(seconds * fps) + 12
-        declared = int(shot.get("durationInFrames") or 0)
-        shot["durationInFrames"] = max(declared, needed)
-        monologue_files[shot["id"]] = target
-
-    # A run of line-less reaction shots after a dialogue shot becomes a silent
-    # gap after that shot's last line, so the reaction keeps its full duration
-    # without colliding with the next line.
-    line_gaps: dict[str, int] = {}
-    for index, shot in enumerate(board):
-        ids = shot.get("lines") or []
-        if not ids:
-            continue
-        gap = 0
-        following = index + 1
-        while following < len(board) and not (board[following].get("lines") or []):
-            gap += int(board[following].get("durationInFrames") or 0)
-            following += 1
-        if gap:
-            line_gaps[ids[-1]] = gap
+    monologue_files = prepare_monologues(
+        board, characters, episode, fps, args.reuse_audio,
+        args.voice_timeout, args.voice_fallback,
+    )
+    leading_frames, line_gaps = reaction_gaps(board)
 
     timed, total_frames, providers = build_timing(
         script,
@@ -663,6 +695,7 @@ def main() -> int:
         args.voice_fallback,
         intro_hold,
         line_gaps,
+        leading_frames,
     )
     scenes: dict[tuple[str, str | None], dict] = {}
     shots, total_frames, line_shifts = build_shots(
@@ -729,35 +762,7 @@ def main() -> int:
             "fadeOutFrames": int(bgm_cfg.get("fadeOutFrames", 75)),
         }
 
-    # Per-shot system voice (vote announcer and similar) is copied verbatim.
-    system_audio_dir = raws / "audio"
-    for shot in shots:
-        source_value = shot.get("systemVoice")
-        if not source_value:
-            continue
-        source = Path(source_value)
-        if not source.is_absolute():
-            candidate = lib.ROOT / source_value
-            if not candidate.is_file():
-                candidate = episode / source_value
-            source = candidate
-        if not source.is_file():
-            raise SystemExit(f"镜头 {shot['id']} 的 systemVoice 不存在：{source_value}")
-        system_audio_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, system_audio_dir / source.name)
-        shot["systemVoice"] = f"audio/{source.name}"
-
-    # Voice the inner monologue: copy its clip next to the dialogue audio.
-    for shot in shots:
-        mono = shot.get("monologue")
-        if not mono:
-            continue
-        target = monologue_files.get(shot["id"])
-        if target is None:
-            continue
-        system_audio_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(target, system_audio_dir / target.name)
-        mono["audio"] = f"audio/{target.name}"
+    snapshot_shot_audio(shots, monologue_files, episode, raws)
 
     # Scene backgrounds are supplied by the owner; copy them into the episode snapshot.
     seen_scenes: set[int] = set()

@@ -19,7 +19,7 @@ style:
 |---|---|---|
 | `label` | 角色 | 头顶词牌：`{ text, tone: normal\|secret }` |
 | `focus` | 镜头 | 聚光灯角色 id；只在没有台词的镜头生效 |
-| `monologue` | 镜头 | 心理字幕：`{ speaker, text }` |
+| `monologue` | 镜头 | 心理字幕：`{ speaker, text, audio? }`，提供 audio 时直接使用录音，否则调用角色 TTS |
 | `voteTags` | 镜头 | 人物身上的投票字：`[{ speaker, text }]` |
 | `systemVoice` | 镜头 | 镜头开头的系统语音，例如“发言结束，开始投票”，不显示字幕 |
 | `durationInFrames` | 镜头 | 无台词镜头的固定长度 |
@@ -121,6 +121,8 @@ uv run python -c "import asyncio, edge_tts; asyncio.run(edge_tts.Communicate('�
 ## 边界
 
 - 无台词镜头由 prepare 自动留出静默时间，后面的台词整体后移。
+- 开头连续的无台词镜头同样保留完整时长；末尾无台词镜头以声明时长结束，不额外追加 outro。转场 padding 另计。
+- `monologue.audio` 和 `systemVoice` 的源路径相对工作区或本集目录；快照按镜头分别保存，不会因源文件同名覆盖对白或其他镜头音频。
 - `focus` 是内心/反应镜头的压暗，不是发言高亮。
 - 投票字按角色主题色和画幅高度计算。
 - 需要气泡时仍按通用规则写 `bubbles`；没有登记 spine 的角色不能使用气泡。

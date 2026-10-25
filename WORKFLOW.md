@@ -133,9 +133,9 @@ publication_approved: false
 
 - `characters[].label`：`{ "text": "按摩仪", "tone": "normal" | "secret", "rotate": -3 }`，头顶词牌。
 - `shot.focus`：聚光灯角色 id。只在没有台词的镜头生效，和“发言时说话人高亮”是两套东西。
-- `shot.monologue`：`{ "speaker": "...", "text": "..." }`，心理字幕；镜头没有台词时整段显示。
+- `shot.monologue`：`{ "speaker": "...", "text": "...", "audio": "audio/thought.wav" }`，心理字幕；镜头没有台词时整段显示。`audio` 可省略，省略时才调用角色 TTS；提供时使用该录音（路径相对工作区或本集目录），并按实测时长扩展反应镜头。
 - `shot.voteTags`：`[{ "speaker": "...", "text": "凯伊" }]`，人物身上的投票字。
-- 无台词镜头：`"lines": []` 加 `durationInFrames`。prepare 会在该镜头处插入等长静默，并把后面的台词整体后移；反应特写、沉默拍都这么写。
+- 无台词镜头：`"lines": []` 加 `durationInFrames`。prepare 会在该镜头处插入等长静默，并把后面的台词整体后移；开场词牌、反应特写、沉默拍都这么写。末尾无台词镜头不再额外追加 `outro_frames`，以声明时长结束；转场 padding 仍按通用规则另计。
 - 发言镜头保持全彩、静态镜头；`focus` 只负责内心/反应镜头的压暗和柔光。
 
 ```json
