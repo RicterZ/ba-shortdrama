@@ -170,7 +170,7 @@ bgm:
 ```
 
 - `from` / `to` 是镜头 id；`to` 省略时等于 `from`，范围含 `to` 镜头结尾。
-- `atLine` 可选，把起点对齐到该镜头内某句台词。
+- `atLine` 可选，把起点对齐到该镜头内某句台词；`offsetFrames` 在它之后再延迟 N 帧。
 - `mute` 是硬静音；`resumeFadeFrames` 可以给恢复加淡入（默认 0，即不做淡入淡出）。
 - `cues` 不会自动静音常驻 BGM，需要同时写 `mute`。
 - 路径相对工作区或本集目录，prepare 会复制进 `raws/audio`。

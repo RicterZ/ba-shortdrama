@@ -337,6 +337,11 @@
                       "type": "string",
                       "description": "可选；以该句台词开始作为走位起点，优先于 startFrame。"
                     },
+                    "offsetFrames": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "atLine 之后再延迟的帧数。"
+                    },
                     "durationInFrames": {
                       "type": "integer",
                       "minimum": 1

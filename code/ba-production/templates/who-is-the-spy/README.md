@@ -52,7 +52,7 @@ bgm:
     - { from: S6, atLine: L21, file: data/audio/bgm/0007-unwelcome-school.ogg, volume: 0.5 }
 ```
 
-`mute` 是硬静音，默认不做淡入淡出；`atLine` 可以把切点对齐到台词。`cues` 不会自动静音常驻 BGM，需要同时写 `mute`。
+`mute` 是硬静音，默认不做淡入淡出；`atLine` 可以把切点对齐到台词，`offsetFrames` 再往后延迟。`cues` 不会自动静音常驻 BGM，需要同时写 `mute`。
 
 ## 完整示例：西瓜和南瓜
 

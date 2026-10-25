@@ -106,7 +106,8 @@
             "properties": {
               "from": {"type": "string"},
               "to": {"type": "string"},
-              "atLine": {"type": "string"}
+              "atLine": {"type": "string"},
+              "offsetFrames": {"type": "integer", "minimum": 0}
             }
           }
         },
@@ -119,6 +120,7 @@
               "from": {"type": "string"},
               "to": {"type": "string"},
               "atLine": {"type": "string"},
+              "offsetFrames": {"type": "integer", "minimum": 0},
               "file": {"type": "string"},
               "volume": {"type": "number", "minimum": 0, "maximum": 1},
               "loop": {"type": "boolean"}

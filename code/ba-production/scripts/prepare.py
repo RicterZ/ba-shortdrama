@@ -437,10 +437,11 @@ def build_shots(
                         raise SystemExit(
                             f"镜头 {raw['id']} 角色 {entry['id']} 的 motion.atLine={motion['atLine']!r} 不在该镜头台词中"
                         )
-                    base = anchor["from"] - start
+                    base = anchor["from"] - start + int(motion.get("offsetFrames", 0))
                     motion["startFrame"] = base
                     motion["endFrame"] = base + int(motion.get("durationInFrames", 18))
                     motion.pop("atLine", None)
+                    motion.pop("offsetFrames", None)
                     motion.pop("durationInFrames", None)
                 for field in ("startFrame", "endFrame"):
                     if motion.get(field) is not None:
@@ -757,7 +758,12 @@ def main() -> int:
 
         shot_index = {shot["id"]: index for index, shot in enumerate(shots)}
 
-        def bgm_range(from_id: str, to_id: str | None, at_line: str | None = None) -> tuple[int, int]:
+        def bgm_range(
+            from_id: str,
+            to_id: str | None,
+            at_line: str | None = None,
+            offset_frames: int = 0,
+        ) -> tuple[int, int]:
             if from_id not in shot_index:
                 raise SystemExit(f"bgm 引用了不存在的镜头：{from_id}")
             target = to_id or from_id
@@ -775,13 +781,18 @@ def main() -> int:
                 )
                 if anchor is None:
                     raise SystemExit(f"bgm 的 atLine={at_line!r} 不在镜头 {from_id} 中")
-                start = int(anchor["from"])
+                start = int(anchor["from"]) + int(offset_frames)
             end = int(shots[last]["from"]) + int(shots[last]["durationInFrames"])
             return start, end - start
 
         mute_ranges = []
         for item in bgm_cfg.get("mute") or []:
-            start, length = bgm_range(item["from"], item.get("to"), item.get("atLine"))
+            start, length = bgm_range(
+                item["from"],
+                item.get("to"),
+                item.get("atLine"),
+                int(item.get("offsetFrames", 0)),
+            )
             mute_ranges.append({"from": start, "durationInFrames": length})
 
         cues = []
@@ -795,7 +806,12 @@ def main() -> int:
             if not cue_src.is_file():
                 raise SystemExit(f"bgm.cues 指向的音频不存在：{cue_file}")
             shutil.copy2(cue_src, bgm_dir / cue_src.name)
-            start, length = bgm_range(item["from"], item.get("to"), item.get("atLine"))
+            start, length = bgm_range(
+                item["from"],
+                item.get("to"),
+                item.get("atLine"),
+                int(item.get("offsetFrames", 0)),
+            )
             cues.append(
                 {
                     "from": start,
