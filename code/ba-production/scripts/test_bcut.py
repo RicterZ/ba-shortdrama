@@ -3,6 +3,7 @@ import copy
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 import wave
 from pathlib import Path
 
@@ -124,6 +125,23 @@ class BcutTests(unittest.TestCase):
         self.assertLess(layers.index("votes"), layers.index("buttons"))
         self.assertLess(layers.index("buttons"), layers.index("thought"))
         self.assertLess(layers.index("meme"), layers.index("chrome"))
+
+    def test_main_track_cannot_ripple_intro_and_transition_gaps(self):
+        def rendered(scene, raws, assets, **kwargs):
+            Image.new("RGB", (200, 100), "blue").save(assets / "background.png")
+            return [{"layer": "background", "name": "background.png",
+                     "label": "background", "startFrame": start, "endFrame": end}
+                    for start, end in [(20, 30), (35, 90)]]
+
+        with patch("render_bcut_layers.render_layers", side_effect=rendered), patch(
+                "compact_bcut_layers.compact_layers", side_effect=lambda spans, *_: spans):
+            export_bcut.build(self.scene, self.raws, self.bundle, visual_layers=True)
+        draft = json.loads((self.bundle / "draft.bjson").read_text())
+        tracks = draft["timelineWidget"]["timeline"]["videoTracks"]
+        self.assertEqual([(c["inPoint"], c["outPoint"]) for c in tracks[0]["clips"]],
+                         [(0, 3000)])
+        self.assertEqual([(c["inPoint"], c["outPoint"]) for c in tracks[1]["clips"]],
+                         [(666, 1000), (1166, 3000)])
 
     def test_render_ranges_skip_only_unmounted_components(self):
         self.scene["intro"] = {"durationInFrames": 20}

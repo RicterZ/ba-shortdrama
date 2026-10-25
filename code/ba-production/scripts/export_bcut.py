@@ -460,11 +460,17 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
         cover.convert("RGB").save(output / "cover.jpg", quality=90)
         from compact_bcut_layers import compact_layers
         spans = compact_layers(spans, scene, assets)
+        # Bcut ripples gaps closed on video track 0 when opening a draft.
+        # Intro/transition patches deliberately leave gaps in the other layers,
+        # so reserve the main track for a continuous canvas underneath them.
+        canvas_name = "timeline-canvas.png"
+        Image.new("RGB", (width, height), "black").save(assets / canvas_name)
+        image(canvas_name, 0, end_ms, 0, "连续画布（保持时间轴）")
         layer_indices = {}
         for span in spans:
             layer = span["layer"]
             if layer not in layer_indices:
-                layer_indices[layer] = len(layer_indices)
+                layer_indices[layer] = len(layer_indices) + 1
             image(span["name"], ms(span["startFrame"]), ms(span["endFrame"]),
                   layer_indices[layer], span["label"])
         for index, event in enumerate(effect_audio_events(scene)):
