@@ -81,15 +81,18 @@
     "voice": {
       "type": "object",
       "required": [
-        "provider",
-        "voice_id"
+        "provider"
       ],
+      "if": {"properties": {"provider": {"const": "gpt-sovits"}}},
+      "then": {"required": ["ref_audio_path", "text_lang", "prompt_lang"]},
+      "else": {"required": ["voice_id"]},
       "properties": {
         "provider": {
           "enum": [
             "fish-audio",
             "edge-tts",
-            "vocu"
+            "vocu",
+            "gpt-sovits"
           ]
         },
         "model": {
@@ -102,6 +105,12 @@
         "api_key_env": {
           "type": "string"
         },
+        "base_url": {"type": "string", "pattern": "^https?://", "minLength": 1},
+        "ref_audio_path": {"type": "string", "minLength": 1},
+        "text_lang": {"type": "string", "minLength": 1},
+        "prompt_lang": {"type": "string", "minLength": 1},
+        "prompt_text": {"type": "string"},
+        "text_split_method": {"type": "string", "minLength": 1},
         "speed": {
           "type": "number",
           "minimum": 0.5,
