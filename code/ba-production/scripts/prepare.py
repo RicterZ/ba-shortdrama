@@ -153,6 +153,24 @@ def build_timing(
         char = characters[line["speaker"]]
         outfit_id = line_outfits.get(line["id"], char["default_outfit"])
         target = audio_dir / f"{index:03}.mp3"
+        if line.get("silent"):
+            # Text-only beat such as a lone "……": keep the caption, skip TTS.
+            frames = max(timing_cfg["min_line_frames"], int(0.8 * fps))
+            tts = {"provider": "silent", "voice_id": "", "model": "", "speed": 1.0, "fallback": False}
+            providers["silent"] = providers.get("silent", 0) + 1
+            timed.append(
+                {
+                    **line,
+                    "outfit": outfit_id,
+                    "start": cursor,
+                    "frames": frames,
+                    "seconds": 0.0,
+                    "audio": "",
+                    "tts": tts,
+                }
+            )
+            cursor += frames + gaps.get(line["id"], 0)
+            continue
         if reuse_audio and target.is_file():
             tts = {"provider": "reused", "voice_id": "", "model": "", "speed": 1.0, "fallback": False}
         else:
@@ -407,6 +425,22 @@ def build_shots(
             motion = entry.get("motion")
             if motion:
                 motion = dict(motion)
+                # A walk/exit can be anchored to the line that triggers it, so
+                # storyboards survive voice-timing changes.
+                if "atLine" in motion:
+                    anchor = next(
+                        (item for item in shot_lines if item["id"] == motion["atLine"]),
+                        None,
+                    )
+                    if anchor is None:
+                        raise SystemExit(
+                            f"镜头 {raw['id']} 角色 {entry['id']} 的 motion.atLine={motion['atLine']!r} 不在该镜头台词中"
+                        )
+                    base = anchor["from"] - start
+                    motion["startFrame"] = base
+                    motion["endFrame"] = base + int(motion.get("durationInFrames", 18))
+                    motion.pop("atLine", None)
+                    motion.pop("durationInFrames", None)
                 for field in ("startFrame", "endFrame"):
                     if motion.get(field) is not None:
                         motion[field] = int(motion[field]) + lead

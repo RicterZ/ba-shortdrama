@@ -275,6 +275,8 @@ def check_timing(
         if start < previous_end:
             report.error(f"台词 {line.get('id')} 与上一句时间重叠")
         previous_end = start + frames
+        if not line.get("audio"):
+            continue
         if not audio.is_file():
             report.error(f"台词 {line.get('id')} 的音频不存在：{audio}")
             continue
@@ -358,7 +360,7 @@ def check_scene(
             if int(line.get("from", 0)) < start + overlap:
                 report.error(f"台词 {line.get('id')} 在镜头 {shot.get('id')} 的转场窗口内开始")
             audio = raws / str(line.get("audio", ""))
-            if not audio.is_file():
+            if line.get("audio") and not audio.is_file():
                 report.error(f"台词 {line.get('id')} 的音频缺失：{audio}")
 
         choices = shot.get("choices")
@@ -435,7 +437,7 @@ def check_scene(
 
     if timing:
         for line in timing.get("lines") or []:
-            if not (raws / str(line.get("audio", ""))).is_file():
+            if line.get("audio") and not (raws / str(line.get("audio", ""))).is_file():
                 report.error(f"timing 中台词 {line.get('id')} 的音频缺失")
 
 

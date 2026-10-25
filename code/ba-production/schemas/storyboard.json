@@ -302,12 +302,12 @@
                     "fromX": {
                       "type": "number",
                       "minimum": 0,
-                      "maximum": 1
+                      "maximum": 2
                     },
                     "toX": {
                       "type": "number",
                       "minimum": 0,
-                      "maximum": 1
+                      "maximum": 2
                     },
                     "fromBottom": {
                       "type": "number",
@@ -332,6 +332,14 @@
                     "startFrame": {
                       "type": "integer",
                       "minimum": 0
+                    },
+                    "atLine": {
+                      "type": "string",
+                      "description": "可选；以该句台词开始作为走位起点，优先于 startFrame。"
+                    },
+                    "durationInFrames": {
+                      "type": "integer",
+                      "minimum": 1
                     },
                     "endFrame": {
                       "type": "integer",
