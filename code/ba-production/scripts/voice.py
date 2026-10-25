@@ -2,7 +2,7 @@
 """Dedicated voice generation CLI for BA short-drama episodes.
 
 Providers are bound per character profile (`voice.provider`):
-vocu (default), fish-audio, edge-tts. API keys come from `local/.env`.
+vocu (default), fish-audio, edge-tts, gpt-sovits. API keys come from `local/.env`.
 
 Examples:
     python scripts/voice.py check
@@ -141,6 +141,41 @@ def vocu_sync_synthesize(text: str, voice: dict, key: str, timeout: int) -> byte
     log.info("vocu sync ready credit=%s url_host=%s", data.get("credit_used"), urllib.parse.urlsplit(audio_url).hostname)
     # Signed CDN URL: never forward the API key to it.
     return fetch_audio(audio_url, timeout)
+
+
+def gpt_sovits_request(text: str, voice: dict) -> tuple[str, dict]:
+    """Build an api_v2 request; reference paths belong to the TTS server."""
+    for field in ("ref_audio_path", "text_lang", "prompt_lang"):
+        if not isinstance(voice.get(field), str) or not voice[field].strip():
+            raise ValueError(f"gpt-sovits requires voice.{field}")
+    base_url = voice.get("base_url", "http://127.0.0.1:9880")
+    parsed = urllib.parse.urlsplit(base_url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.query or parsed.fragment:
+        raise ValueError("gpt-sovits base_url must be an HTTP(S) server URL without query or fragment")
+    return base_url.rstrip("/") + "/tts", {
+        "text": text,
+        "text_lang": voice["text_lang"],
+        "ref_audio_path": voice["ref_audio_path"],
+        "prompt_lang": voice["prompt_lang"],
+        "prompt_text": voice.get("prompt_text", ""),
+        "speed_factor": float(voice.get("speed", 1.0)),
+        "text_split_method": voice.get("text_split_method", "cut5"),
+        "media_type": "wav",
+        "streaming_mode": False,
+    }
+
+
+def synth_gpt_sovits(text: str, voice: dict, out: Path, timeout: int) -> None:
+    url, payload = gpt_sovits_request(text, voice)
+    body, content_type = _fetch(
+        "POST", url, timeout,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    if not (body[:4] == b"RIFF" and body[8:12] == b"WAVE"):
+        raise RuntimeError(f"GPT-SoVITS returned non-WAV content ({content_type}): {body[:200]!r}")
+    # The shared trim step decodes WAV and writes the final MP3.
+    out.write_bytes(body)
 
 
 def synth_vocu(text: str, voice: dict, out: Path, timeout: int) -> None:
@@ -285,7 +320,7 @@ def download_audio(url: str, target: Path, timeout: int) -> int:
     return len(body)
 
 
-PROVIDERS = {"fish-audio": synth_fish, "edge-tts": synth_edge, "vocu": synth_vocu}
+PROVIDERS = {"fish-audio": synth_fish, "edge-tts": synth_edge, "vocu": synth_vocu, "gpt-sovits": synth_gpt_sovits}
 
 
 def synth_voice(text: str, voice: dict, out: Path, timeout: int) -> None:
@@ -487,6 +522,14 @@ def cmd_check(args: argparse.Namespace) -> int:
         print(f"{cid}: provider={provider} voice={voice.get('voice_id', '')}")
         print(f"  key {key_env or '(none)'}: {'present' if has_key else 'MISSING' if has_key is not None else 'n/a'}")
         log.info("check %s provider=%s voice=%s key=%s", cid, provider, voice.get("voice_id", ""), bool(has_key))
+        if provider == "gpt-sovits":
+            try:
+                url, _ = gpt_sovits_request(args.text, voice)
+                print(f"  endpoint: {url}; reference: {voice['ref_audio_path']}")
+            except ValueError as exc:
+                failures += 1
+                print(f"  FAIL {exc}")
+                continue
         if args.config_only:
             continue
         # 音色存在性查询是轻量 GET（毫秒级），默认只做这一步；试音会占用生成队列，需显式 --synthesize。

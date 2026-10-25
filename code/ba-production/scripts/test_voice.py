@@ -1,7 +1,12 @@
 """Offline provider contract and fallback tests."""
+import io
 import json
+import math
+import struct
 import tempfile
 import unittest
+import wave
+from argparse import Namespace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -11,6 +16,83 @@ import voice
 
 
 class VoiceTests(unittest.TestCase):
+    GPT_VOICE = {
+        "provider": "gpt-sovits", "base_url": "http://localhost:9880/",
+        "ref_audio_path": "/server/references/momoi.wav",
+        "text_lang": "ja", "prompt_lang": "ja", "prompt_text": "参考文本",
+        "speed": 1.2,
+    }
+
+    def test_gpt_sovits_request_and_mp3_pipeline(self):
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as audio:
+            audio.setparams((1, 2, 32000, 0, "NONE", "not compressed"))
+            audio.writeframes(b"".join(
+                struct.pack("<h", int(8000 * math.sin(2 * math.pi * 440 * i / 32000)))
+                for i in range(16000)
+            ))
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            voice.requests, "request", return_value=self._response("audio/wav", buffer.getvalue())
+        ) as request:
+            out = Path(tmp) / "sample.mp3"
+            used = voice.synthesize_line("こんにちは", self.GPT_VOICE, out, 30, False)
+            self.assertEqual(used["provider"], "gpt-sovits")
+            self.assertGreater(lib.probe_duration(out), 0)
+            with voice.av.open(str(out)) as result:
+                self.assertEqual(result.streams.audio[0].codec_context.name, "mp3float")
+            self.assertEqual(request.call_args.args, ("POST", "http://localhost:9880/tts"))
+            self.assertEqual(request.call_args.kwargs["timeout"], 30)
+            payload = json.loads(request.call_args.kwargs["data"])
+            self.assertEqual(payload, {
+                "text": "こんにちは", "text_lang": "ja",
+                "ref_audio_path": self.GPT_VOICE["ref_audio_path"],
+                "prompt_lang": "ja", "prompt_text": "参考文本",
+                "speed_factor": 1.2, "text_split_method": "cut5",
+                "media_type": "wav", "streaming_mode": False,
+            })
+
+    def test_gpt_sovits_validation(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(voice.requests, "request") as request:
+            out = Path(tmp) / "sample.mp3"
+            for field in ("ref_audio_path", "text_lang", "prompt_lang"):
+                with self.subTest(field=field), self.assertRaisesRegex(ValueError, field):
+                    voice.synth_gpt_sovits("test", {**self.GPT_VOICE, field: ""}, out, 1)
+            with self.assertRaisesRegex(ValueError, "base_url"):
+                voice.synth_gpt_sovits("test", {**self.GPT_VOICE, "base_url": "file:///tmp"}, out, 1)
+            request.assert_not_called()
+            for body in (b"", b'{"error":"invalid reference"}', b"RIFFbad"):
+                request.return_value = self._response("application/json", body)
+                with self.assertRaisesRegex(RuntimeError, "non-WAV"):
+                    voice.synth_gpt_sovits("test", self.GPT_VOICE, out, 1)
+                self.assertFalse(out.exists())
+            request.return_value.ok = False
+            request.return_value.status_code = 400
+            with self.assertRaisesRegex(RuntimeError, "HTTP 400"):
+                voice.synth_gpt_sovits("test", self.GPT_VOICE, out, 1)
+
+    def test_gpt_sovits_schema(self):
+        schema = json.loads((lib.SCHEMAS / "profile.json").read_text())
+        validator = jsonschema.Draft202012Validator({
+            "$ref": "#/properties/voice", "properties": schema["properties"],
+        })
+        validator.validate(self.GPT_VOICE)
+        validator.validate({"provider": "edge-tts", "voice_id": "a", "fallback": self.GPT_VOICE})
+        for cfg in ({"provider": "vocu"}, {"provider": "gpt-sovits", "voice_id": "a"}):
+            with self.assertRaises(jsonschema.ValidationError):
+                validator.validate(cfg)
+
+    def test_gpt_sovits_check_is_offline(self):
+        args = Namespace(character="test", text="test", config_only=True, synthesize=False)
+        with patch.object(lib, "read_character", return_value={"voice": self.GPT_VOICE}), patch.object(
+            voice.requests, "request"
+        ) as request:
+            self.assertEqual(voice.cmd_check(args), 0)
+            request.assert_not_called()
+        with patch.object(lib, "read_character", return_value={"voice": {"provider": "gpt-sovits"}}):
+            self.assertEqual(voice.cmd_check(args), 1)
+        cfg = {key: value for key, value in self.GPT_VOICE.items() if key != "base_url"}
+        self.assertEqual(voice.gpt_sovits_request("test", cfg)[0], "http://127.0.0.1:9880/tts")
+
     @staticmethod
     def _response(content_type: str, body: bytes) -> MagicMock:
         response = MagicMock()
@@ -95,7 +177,7 @@ class VoiceTests(unittest.TestCase):
             request.assert_not_called()
 
     def test_fallback_both_directions_and_opt_in(self):
-        for primary, secondary in [("vocu", "fish-audio"), ("fish-audio", "vocu"), ("edge-tts", "vocu")]:
+        for primary, secondary in [("vocu", "fish-audio"), ("fish-audio", "vocu"), ("edge-tts", "vocu"), ("gpt-sovits", "edge-tts"), ("vocu", "gpt-sovits")]:
             cfg = {"provider": primary, "voice_id": "a", "fallback": {"provider": secondary, "voice_id": "b"}}
             with tempfile.TemporaryDirectory() as tmp, patch.object(voice.time, "sleep"), patch.object(
                 voice, "synth_voice", side_effect=[RuntimeError("fail")] * 3 + [None]

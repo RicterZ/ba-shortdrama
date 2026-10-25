@@ -86,20 +86,22 @@ Agent 在新 checkout 上第一次生成语音（`ep:prepare`、`npm run voice -
 | `vocu`（悟声，现有角色默认） | `VOCU_API_KEY`（付费账户）；各角色的 `voice_id` | key 写 `local/.env`，`voice_id` 写角色 profile |
 | `fish-audio` | `FISH_AUDIO_API_KEY`；各角色的 `voice_id` | 同上 |
 | `edge-tts` | 无，免费、不需要 key | 只改角色 profile |
+| `gpt-sovits` | 已启动的官方 `api_v2.py` 服务地址、服务端参考音频路径及语言 | 角色 profile（配置见下文） |
 | 不选 | 无 | 不改配置，生成时加 fallback 参数 |
 
 流程：
 
 1. 用户选了付费 provider：请用户提供 key，Agent 写入 `local/.env` 并 `chmod 600 local/.env`。不要把 key 写进命令行参数、提交、日志或 issue 评论；回复里只说"已写入"，不要回显 key。用户想自己填时，告诉他变量名，等他确认填好再继续。
-2. 角色 profile 的 `voice.provider`、`voice.voice_id`、`voice.api_key_env` 要和所选 provider 一致；不同服务的音色 ID 不通用，缺 `voice_id` 时向用户要，不要猜。
-3. 运行 `npm run voice -- check` 确认 key 和音色可用，通过后再生成。
-4. 用户不选，或者暂时没有 key：使用 profile 里的 `voice.fallback`（通常是 `edge-tts`），生成时显式加 `--voice-fallback`（`prepare.py`）或 `--fallback`（`voice.py`），并告诉用户当前音频来自 fallback 声线，之后换回正式 provider 时要重新合成，不能带 `--reuse-audio`。
+2. 角色 profile 的 `voice.provider`、`voice.voice_id`、`voice.api_key_env` 要和所选 provider 一致；不同服务的音色 ID 不通用，缺 `voice_id` 时向用户要，不要猜。`gpt-sovits` 不使用 `voice_id`，而使用参考音频及语言字段。
+3. 用户选 `gpt-sovits`：先请用户按角色填写或确认 `base_url`（本机默认地址也需确认）、`ref_audio_path`、`text_lang`、`prompt_lang`、`prompt_text`（参考音频准确转写；留空须用户确认）。说明参考路径属于服务端；询问各角色共用模型还是使用独立模型，独立模型需提供各自服务地址。可选项 `speed` 默认 1.0、`text_split_method` 默认 `cut5`。缺少必填配置时停止并询问，不猜路径、语言、转写或模型，不擅自换成其他 provider。完整示例见下文「GPT-SoVITS（自托管）」。
+4. 运行 `npm run voice -- check` 检查配置；对 GPT-SoVITS 这一步不联网，不能证明模型可用。用户确认配置后，运行 `npm run voice -- check --character <角色id> --synthesize` 做真实试音，并请用户确认声线，再生成整集。
+5. 用户不选，或者暂时没有 key：使用 profile 里的 `voice.fallback`（通常是 `edge-tts`），生成时显式加 `--voice-fallback`（`prepare.py`）或 `--fallback`（`voice.py`），并告诉用户当前音频来自 fallback 声线，之后换回正式 provider 时要重新合成，不能带 `--reuse-audio`。已选 GPT-SoVITS 但配置不全时，应先等待补齐，不适用此默认 fallback 流程。
 
 用户已经做过选择、`local/.env` 里已有对应 key 时，不必重复询问。
 
 ## API key
 
-语音由各角色 profile 的 `voice.provider` 选择，可在同一集混用 `vocu`、`fish-audio`、`edge-tts`。现有三名角色默认走 Vocu，key 只保存在本机：
+语音由各角色 profile 的 `voice.provider` 选择，可在同一集混用 `vocu`、`fish-audio`、`edge-tts`、`gpt-sovits`。现有三名角色默认走 Vocu，key 只保存在本机：
 
 ```sh
 # local/.env（权限 600，已在 .gitignore 中）
@@ -126,6 +128,38 @@ VOCU_API_KEY=...
 - 渲染：本机 Remotion + Chrome。
 
 `PEXELS_API_KEY`、`PIXABAY_API_KEY`、`FREESOUND_API_KEY`、`CARO_LLM_*` 只在接入 CaroCut 的原生素材检索/生图流程时才需要。
+
+### GPT-SoVITS（自托管）
+
+适配[官方 `api_v2.py`](https://github.com/RVC-Boss/GPT-SoVITS/blob/main/api_v2.py) 的 `POST /tts`，不是旧版 `api.py` 或 Gradio 接口。模型及运行环境由 GPT-SoVITS 单独管理，本仓库不安装推理依赖或下载模型。在其目录启动服务：
+
+```sh
+python api_v2.py -a 127.0.0.1 -p 9880 -c GPT_SoVITS/configs/tts_infer.yaml
+```
+
+角色 `profile.yaml` 的 `voice` 示例：
+
+```yaml
+voice:
+  provider: gpt-sovits
+  base_url: http://127.0.0.1:9880
+  ref_audio_path: /server/references/character.wav
+  text_lang: ja
+  prompt_lang: ja
+  prompt_text: 参考音频中实际说出的台词
+  speed: 1.0
+  text_split_method: cut5
+  fallback:
+    provider: edge-tts
+    voice_id: ja-JP-NanamiNeural
+```
+
+- `base_url` 可省略，默认 `http://127.0.0.1:9880`，不要加 `/tts`。官方接口不需要 API key；远程部署应通过可信网络连接，不要把无鉴权服务直接暴露到公网。
+- `ref_audio_path`、`text_lang`、`prompt_lang` 必填。参考路径由**服务端**读取，不是本机上传；语言代码必须是已加载模型支持的值（如 `zh`、`ja`、`en`）。`prompt_text` 应填写参考音频的准确转写。
+- `speed` 映射到 `speed_factor`。固定请求非流式 WAV，由共用裁静音流程转成最终 MP3；无需配置 `format`。字幕仍用 `text`，外语配音可用台词的 `voice_text`。
+- `check` / `check --config-only` 仅校验本地配置，不保证服务在线、参考路径存在或模型可用；`check --synthesize` 才会调用服务验证。`sample`、`episode` 和 `prepare` 共用此 provider，重试与显式启用的 fallback 行为不变。
+- 不自动调用全局模型切换接口。多角色共用同一模型时使用不同参考音频；需要不同模型时分别启动服务并在各角色配置不同 `base_url`，避免影响共享服务的其他请求。
+- 本配置只是示例，不会修改现有角色声线。真实试音前先确认用户提供的服务地址、参考音频和模型授权。
 
 ## CaroCut Web 界面（可选）
 
