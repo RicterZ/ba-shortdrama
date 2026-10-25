@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -360,30 +361,56 @@ def trim_silence(path: Path) -> None:
     which reads as a broken delivery in a 3-minute sketch. Edge silence is
     removed entirely; internal pauses longer than 0.6s are shortened to 0.28s
     so the beat stays without stalling.
+
+    Remotion ships a stripped ffmpeg without `silenceremove`; in that case the
+    original audio is kept and a warning is logged instead of failing the take.
     """
+    import shutil
+
+    explicit = os.environ.get("FFMPEG")
+    if explicit:
+        ffmpeg = explicit
+    else:
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            try:
+                import imageio_ffmpeg
+
+                ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+            except Exception:  # noqa: BLE001
+                ffmpeg = None
+        if not ffmpeg:
+            probe = Path(lib.ffprobe_bin())
+            sibling = probe.with_name("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
+            ffmpeg = str(sibling) if sibling.is_file() else "ffmpeg"
     tmp = path.with_suffix(".trim.mp3")
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-y",
-            "-loglevel",
-            "error",
-            "-i",
-            str(path),
-            "-af",
-            "silenceremove=start_periods=1:start_duration=0:start_threshold=-45dB,"
-            "areverse,"
-            "silenceremove=start_periods=1:start_duration=0:start_threshold=-45dB,"
-            "areverse,"
-            "silenceremove=stop_periods=-1:stop_duration=0.6:stop_threshold=-40dB:stop_silence=0.28",
-            "-c:a",
-            "libmp3lame",
-            "-b:a",
-            "96k",
-            str(tmp),
-        ],
-        check=True,
-    )
+    try:
+        subprocess.run(
+            [
+                ffmpeg,
+                "-y",
+                "-loglevel",
+                "error",
+                "-i",
+                str(path),
+                "-af",
+                "silenceremove=start_periods=1:start_duration=0:start_threshold=-45dB,"
+                "areverse,"
+                "silenceremove=start_periods=1:start_duration=0:start_threshold=-45dB,"
+                "areverse,"
+                "silenceremove=stop_periods=-1:stop_duration=0.6:stop_threshold=-40dB:stop_silence=0.28",
+                "-c:a",
+                "libmp3lame",
+                "-b:a",
+                "96k",
+                str(tmp),
+            ],
+            check=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+        log.warning("trim silence skipped (%s); keeping untrimmed audio", exc)
+        tmp.unlink(missing_ok=True)
+        return
     tmp.replace(path)
 
 
