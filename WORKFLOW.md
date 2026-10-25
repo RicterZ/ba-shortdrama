@@ -35,7 +35,7 @@ cd code/ba-production
 npm run ep:new -- 003-summer-patch --title "夏日补丁" --characters saiba-momoi
 ```
 
-`episode.yaml` 的 `template` 选择渲染模板，默认 `official`；新建集数可用 `--template official` 指定。模板入口位于 `templates/<模板 id>/index.tsx`，当前只有 `templates/official/index.tsx`。`width` / `height` / `fps` 是画幅与帧率配置，例如竖屏可用 `--width 720 --height 1280`。模板决定视觉呈现，画幅尺寸由集数配置决定。新建的剧集默认带 `transitions` 块（场景切换加 12 帧 fade），规则见下面「转场」。
+`episode.yaml` 的 `template` 选择渲染模板，默认 `official`；新建集数可用 `--template official` 指定。模板入口位于 `templates/<模板 id>/index.tsx`，当前有 `templates/official/index.tsx`（实机风格）和 `templates/who-is-the-spy/index.tsx`（谁是卧底：词牌、聚光灯、大字幕、投票字）。`width` / `height` / `fps` 是画幅与帧率配置，例如竖屏可用 `--width 720 --height 1280`。模板决定视觉呈现，画幅尺寸由集数配置决定。新建的剧集默认带 `transitions` 块（场景切换加 12 帧 fade），规则见下面「转场」。
 
 生成 `videos/003-summer-patch/` 骨架和空白的 `script.json`、`storyboard.json`。填完后才能准备。
 
@@ -126,6 +126,30 @@ publication_approved: false
   ```
 - `episode.yaml` 的 `ui` 块可以覆盖 UI 音效（`click` / `select` / `hover` 对应 `data/ui/sfx/<name>.wav`）、关闭逐句点击音（`lineClick: false`）或调整音量（`lineClickVolume`）。不写时使用默认三件套。
 - 台词按镜头顺序连续排布；切镜点由 `timing` 参数自动决定，不需要手写帧号。
+
+### 谁是卧底模板
+
+`episode.yaml` 里写 `template: who-is-the-spy`，并在 `style.caption_style` 写 `meme`。它沿用通用分镜字段，另外认这些演出声明：
+
+- `characters[].label`：`{ "text": "按摩仪", "tone": "normal" | "secret", "rotate": -3 }`，头顶词牌。
+- `shot.focus`：聚光灯角色 id。只在没有台词的镜头生效，和“发言时说话人高亮”是两套东西。
+- `shot.monologue`：`{ "speaker": "...", "text": "..." }`，心理字幕；镜头没有台词时整段显示。
+- `shot.voteTags`：`[{ "speaker": "...", "text": "凯伊" }]`，人物身上的投票字。
+- 无台词镜头：`"lines": []` 加 `durationInFrames`。prepare 会在该镜头处插入等长静默，并把后面的台词整体后移；反应特写、沉默拍都这么写。
+- 发言镜头保持全彩、静态镜头；`focus` 只负责内心/反应镜头的压暗和柔光。
+
+```json
+{
+  "id": "C1",
+  "scene": "game-dev-room",
+  "durationInFrames": 24,
+  "focus": "saiba-momoi",
+  "characters": [
+    { "id": "saiba-momoi", "outfit": "winter", "x": 0.5, "bottom": -1.15, "height": 2.1, "emotion": "shocked" }
+  ],
+  "lines": []
+}
+```
 
 ### 转场
 

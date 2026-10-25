@@ -63,6 +63,48 @@
               "pull-back"
             ]
           },
+          "durationInFrames": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "仅无台词镜头使用：这一段反应镜头的固定长度。"
+          },
+          "focus": {
+            "type": "string",
+            "description": "聚光灯角色 id；只在没有台词的心理/反应镜头里生效。"
+          },
+          "monologue": {
+            "type": "object",
+            "required": [
+              "speaker",
+              "text"
+            ],
+            "properties": {
+              "speaker": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          },
+          "voteTags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "speaker",
+                "text"
+              ],
+              "properties": {
+                "speaker": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "transition": {
             "oneOf": [
               {
@@ -138,13 +180,13 @@
                 },
                 "bottom": {
                   "type": "number",
-                  "minimum": -1,
+                  "minimum": -2,
                   "maximum": 1
                 },
                 "height": {
                   "type": "number",
                   "minimum": 0.1,
-                  "maximum": 1.5
+                  "maximum": 3
                 },
                 "scale": {
                   "type": "number",
@@ -167,6 +209,26 @@
                 },
                 "emotion": {
                   "type": "string"
+                },
+                "label": {
+                  "type": "object",
+                  "required": [
+                    "text"
+                  ],
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "tone": {
+                      "enum": [
+                        "normal",
+                        "secret"
+                      ]
+                    },
+                    "rotate": {
+                      "type": "number"
+                    }
+                  }
                 },
                 "holdEmotion": {
                   "type": "boolean"

@@ -136,7 +136,9 @@ def build_timing(
     timeout: int,
     allow_fallback: bool,
     intro_hold: int = 0,
+    line_gaps: dict[str, int] | None = None,
 ) -> tuple[list[dict], int, dict]:
+    gaps = line_gaps or {}
     audio_dir = episode / "audio"
     raws_audio = episode / "raws" / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
@@ -176,7 +178,7 @@ def build_timing(
                 "tts": tts,
             }
         )
-        cursor += frames
+        cursor += frames + gaps.get(line["id"], 0)
     return timed, cursor + timing_cfg["outro_frames"], providers
 
 
@@ -223,6 +225,7 @@ def build_shots(
     scenes: dict[tuple[str, str | None], dict],
     default_outfits: dict[str, str],
     transitions_cfg: dict | None = None,
+    line_gaps: dict[str, int] | None = None,
 ) -> tuple[list[dict], int, dict[str, int]]:
     by_id = {line["id"]: line for line in timed}
     flat: list[str] = []
@@ -234,16 +237,47 @@ def build_shots(
             f"storyboard: {flat}\nscript:     {[line['id'] for line in timed]}"
         )
 
+    # Reaction shots consume the silent gap that build_timing inserted after the
+    # previous shot's last line. Their declared duration is authoritative.
+    for shot in board:
+        if not (shot.get("lines") or []):
+            hold = int(shot.get("durationInFrames") or 0)
+            if hold <= 0:
+                raise SystemExit(
+                    f"镜头 {shot['id']} 没有台词，必须写正整数 durationInFrames"
+                )
+
     total = timed[-1]["start"] + timed[-1]["frames"] + timing_cfg["outro_frames"]
+    total += (line_gaps or {}).get(timed[-1]["id"], 0)
     boundaries = [0]
     for index in range(1, len(board)):
-        shot = board[index]
-        first = by_id[shot["lines"][0]]
-        last = by_id[board[index - 1]["lines"][-1]]
-        previous_end = last["start"] + last["frames"] + timing_cfg["shot_tail_frames"]
-        cut = max(previous_end, first["start"] - timing_cfg["shot_cut_lead_frames"])
-        cut = min(cut, first["start"])
+        previous = board[index - 1]
+        current = board[index]
+        if previous.get("lines"):
+            last = by_id[previous["lines"][-1]]
+            previous_end = last["start"] + last["frames"]
+            if current.get("lines"):
+                previous_end += timing_cfg["shot_tail_frames"]
+        else:
+            previous_end = boundaries[index - 1] + int(previous["durationInFrames"])
+        if current.get("lines"):
+            first = by_id[current["lines"][0]]
+            cut = max(previous_end, first["start"] - timing_cfg["shot_cut_lead_frames"])
+            cut = min(cut, first["start"])
+        else:
+            cut = previous_end
         boundaries.append(cut)
+    last = board[-1]
+    if last.get("lines"):
+        last_line = by_id[last["lines"][-1]]
+        end = (
+            last_line["start"]
+            + last_line["frames"]
+            + timing_cfg["outro_frames"]
+        )
+        total = max(total, end)
+    else:
+        total = max(total, boundaries[-1] + int(last["durationInFrames"]))
     boundaries.append(total)
 
     # Resolve the scene of every shot up front: an automatic transition depends
@@ -322,7 +356,7 @@ def build_shots(
         content_start = boundaries[index] + shifts[index]
         content_end = boundaries[index + 1] + shifts[index]
         shot_lines = []
-        for lid in raw["lines"]:
+        for lid in raw.get("lines") or []:
             line = by_id[lid]
             line_from = line["start"] + shifts[index]
             if not (content_start <= line_from and line_from + line["frames"] <= content_end):
@@ -425,6 +459,7 @@ def build_shots(
                     "facing": facing,
                     "turns": turns,
                     "motion": motion,
+                    "label": entry.get("label"),
                 }
             )
         background = raw.get("background", "#eef6f4")
@@ -470,6 +505,9 @@ def build_shots(
                 "scene": scene_defs[index],
                 "background": background,
                 "camera": raw.get("camera", "static"),
+                "focus": raw.get("focus"),
+                "monologue": raw.get("monologue"),
+                "voteTags": raw.get("voteTags"),
                 "characters": characters,
                 "lines": shot_lines,
                 "choices": choices,
@@ -535,6 +573,22 @@ def main() -> int:
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
+    # A run of line-less reaction shots after a dialogue shot becomes a silent
+    # gap after that shot's last line, so the reaction keeps its full duration
+    # without colliding with the next line.
+    line_gaps: dict[str, int] = {}
+    for index, shot in enumerate(board):
+        ids = shot.get("lines") or []
+        if not ids:
+            continue
+        gap = 0
+        following = index + 1
+        while following < len(board) and not (board[following].get("lines") or []):
+            gap += int(board[following].get("durationInFrames") or 0)
+            following += 1
+        if gap:
+            line_gaps[ids[-1]] = gap
+
     timed, total_frames, providers = build_timing(
         script,
         characters,
@@ -546,6 +600,7 @@ def main() -> int:
         args.voice_timeout,
         args.voice_fallback,
         intro_hold,
+        line_gaps,
     )
     scenes: dict[tuple[str, str | None], dict] = {}
     shots, total_frames, line_shifts = build_shots(
@@ -555,6 +610,7 @@ def main() -> int:
         scenes,
         {cid: char["default_outfit"] for cid, char in characters.items()},
         config.get("transitions"),
+        line_gaps,
     )
     # Transitions push every line after the cut later; timing.json is the
     # readable absolute timeline, so it carries the same padding as scene.json.

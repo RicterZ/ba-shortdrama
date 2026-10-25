@@ -375,12 +375,29 @@ def spoken_text(line: dict) -> str:
     return (line.get("voice_text") or line.get("text") or "").strip()
 
 
+def ffprobe_bin() -> str:
+    """Resolve ffprobe, including the copy bundled with Remotion's compositor."""
+    import shutil
+
+    explicit = os.environ.get("FFPROBE")
+    if explicit:
+        return explicit
+    found = shutil.which("ffprobe")
+    if found:
+        return found
+    compositor = ROOT / "code" / "ba-production" / "node_modules" / "@remotion"
+    for candidate in sorted(compositor.glob("compositor-*/ffprobe*")):
+        if candidate.is_file():
+            return str(candidate)
+    return "ffprobe"
+
+
 def probe_duration(path: Path) -> float:
     import subprocess
 
     out = subprocess.check_output(
         [
-            "ffprobe",
+            ffprobe_bin(),
             "-v",
             "error",
             "-show_entries",
@@ -398,7 +415,7 @@ def probe_media(path: Path) -> dict:
     import subprocess
 
     out = subprocess.check_output(
-        ["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)],
+        [ffprobe_bin(), "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)],
         text=True,
     )
     return json.loads(out)

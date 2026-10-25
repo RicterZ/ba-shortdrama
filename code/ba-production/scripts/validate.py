@@ -164,8 +164,11 @@ def check_script_and_board(
             report.error(f"镜头 id 重复：{sid}")
         shot_ids.add(sid)
         line_ids = shot.get("lines") or []
-        if not line_ids:
-            report.error(f"镜头 {sid} 没有引用台词")
+        if not line_ids and not shot.get("durationInFrames"):
+            report.error(f"镜头 {sid} 没有引用台词，也没有 durationInFrames")
+        if not line_ids and shot.get("durationInFrames"):
+            if int(shot["durationInFrames"]) <= 0:
+                report.error(f"镜头 {sid} 的 durationInFrames 必须为正整数")
         flat.extend(line_ids)
         for entry in shot.get("characters") or []:
             cid = entry.get("id")
@@ -177,7 +180,7 @@ def check_script_and_board(
                 report.error(f"镜头 {sid} 的角色 {cid} 引用了不存在的服装 {outfit!r}")
             if not 0.0 <= float(entry.get("x", 0.5)) <= 1.0:
                 report.error(f"镜头 {sid} 角色 {cid} 的 x 必须在 0 到 1 之间")
-            if not 0.0 <= float(entry.get("height", lib.DEFAULT_CHARACTER_HEIGHT)) <= 1.5:
+            if not 0.0 <= float(entry.get("height", lib.DEFAULT_CHARACTER_HEIGHT)) <= 3.0:
                 report.error(f"镜头 {sid} 角色 {cid} 的 height 超出合理范围")
 
         scene_ref = shot.get("scene")
