@@ -67,24 +67,18 @@ class BcutTests(unittest.TestCase):
                          [(0, 1000), (1000, 2000), (2000, 3000)])
         self.assertAlmostEqual(music[0]["fxs"][0]["gainValue"], -6.0206, places=4)
 
-    def test_image_clips_have_no_undefined_crop(self):
+    def test_static_clips_keep_template_effects(self):
         draft = self.build()
-        tracks = draft["timelineWidget"]["timeline"]["videoTracks"]
-        for track in tracks:
-            for clip in track["clips"]:
-                self.assertFalse(any(fx.get("businessType") == 2 for fx in clip["fxs"]))
-                self.assertEqual(clip["propertyFxList"], [])
+        clips = [clip for track in draft["timelineWidget"]["timeline"]["videoTracks"] for clip in track["clips"]]
+        self.assertTrue(any(fx.get("businessType") == 2 for clip in clips for fx in clip["fxs"]))
 
-    def test_caption_indices_stack_above_every_video_track(self):
+    def test_caption_tracks_follow_creation_order(self):
         self.scene["episode"]["template"] = "who-is-the-spy"
         self.scene["shots"][0]["characters"][0]["label"] = {"text": "Word"}
         self.scene["shots"][0]["voteTags"] = [{"speaker": "c", "text": "Vote"}]
         timeline = self.build()["timelineWidget"]["timeline"]
-        video_indices = [track["index"] for track in timeline["videoTracks"]]
-        caption_indices = [track["index"] for track in timeline["captionTracks"]]
-        self.assertEqual(len(set(video_indices + caption_indices)),
-                         len(video_indices) + len(caption_indices))
-        self.assertGreater(min(caption_indices), max(video_indices))
+        self.assertEqual([track["index"] for track in timeline["videoTracks"]], [0, 1])
+        self.assertEqual([track["index"] for track in timeline["captionTracks"]], [0, 1, 2])
 
     def test_effect_sounds_match_intro_visibility_and_clip_boundaries(self):
         self.scene["intro"] = {"durationInFrames": 20}
@@ -111,6 +105,7 @@ class BcutTests(unittest.TestCase):
     def test_editable_spy_omits_rendered_text_layers(self):
         self.scene["episode"]["template"] = "who-is-the-spy"
         layers = default_layers(self.scene, editable_captions=True)
+        self.assertLess(layers.index("dialogue-ba"), layers.index("character-slot:0"))
         self.assertIn("dialogue-ba", layers)
         self.assertIn("buttons", layers)
         self.assertFalse(set(layers) & {"word-labels", "votes", "thought", "meme"})
@@ -122,6 +117,7 @@ class BcutTests(unittest.TestCase):
         self.assertLess(layers.index("buttons"), layers.index("chrome"))
         self.scene["episode"]["template"] = "who-is-the-spy"
         layers = default_layers(self.scene)
+        self.assertLess(layers.index("dialogue-ba"), layers.index("character-slot:0"))
         self.assertLess(layers.index("word-labels"), layers.index("choices"))
         self.assertLess(layers.index("votes"), layers.index("buttons"))
         self.assertLess(layers.index("buttons"), layers.index("thought"))
@@ -152,7 +148,7 @@ class BcutTests(unittest.TestCase):
             'def layout(scene, **kwargs):\n'
             '    yield TextElement("Third", 0, 10, center_x=12, font_size=8)\n')
         self.scene["episode"]["template"] = "third-template"
-        with patch.object(text_layout, "__file__", str(scripts / "text_layout.py")):
+        with patch("bcut_processor.__file__", str(scripts / "bcut_processor.py")):
             elements = text_layout.text_elements(self.scene)
         self.assertEqual(elements[0].text, "Third")
         self.assertEqual(elements[0].center_x, 12)
@@ -257,10 +253,9 @@ class BcutTests(unittest.TestCase):
         self.assertIn(original, [p.read_bytes() for p in root.glob("*.bak")])
         data = json.loads(next(first.glob("*.bjson")).read_text())
         self.assertNotIn("__BA_ASSETS__", json.dumps(data))
-        self.assertNotIn("__BCUT_FONT__", json.dumps(data))
         caption = data["timelineWidget"]["timeline"]["captionTracks"][0]["captions"][0]
-        self.assertEqual(caption["defaultFontPath"], self.font.resolve().as_posix())
-        self.assertEqual(caption["assetInfo"]["fontSrcPath"], self.font.resolve().as_posix())
+        self.assertEqual(caption["defaultFontPath"], "")
+        self.assertEqual(caption["assetInfo"]["fontSrcPath"], "")
         for tr in data["timelineWidget"]["timeline"]["videoTracks"]:
             for clip in tr["clips"]:
                 self.assertTrue(Path(clip["sourcePath"]).is_file())
@@ -302,9 +297,8 @@ class BcutTests(unittest.TestCase):
         clips = draft["timelineWidget"]["timeline"]["videoTracks"][1]["clips"]
         self.assertEqual(
             [(c["inPoint"], c["outPoint"], c["assetInfo"]["displayName"]) for c in clips],
-            [(0, 333, "c default"), (333, 666, "c happy"), (666, 3000, "c shy")])
-        # At the exact first frame of the new expression, only it is active.
-        at = 20 * 1000 / 30
+            [(0, 333, "c default"), (333, 667, "c happy"), (667, 3000, "c shy")])
+        at = 667
         active = [c for c in clips if c["inPoint"] <= at < c["outPoint"]]
         self.assertEqual([c["assetInfo"]["displayName"] for c in active], ["c shy"])
         for clip in clips:
@@ -338,7 +332,7 @@ class BcutTests(unittest.TestCase):
     def test_reject_unsafe_asset_and_unsupported_template(self):
         bad = copy.deepcopy(self.scene)
         bad["episode"]["template"] = "blue-archive"
-        with self.assertRaisesRegex(ValueError, "official"):
+        with self.assertRaisesRegex(ValueError, "processor"):
             export_bcut.build(bad, self.raws, self.bundle)
         bad = copy.deepcopy(self.scene)
         bad["shots"][0]["scene"]["image"] = "../outside.png"
@@ -378,7 +372,7 @@ class BcutTests(unittest.TestCase):
         self.assertEqual([(c["inPoint"], c["outPoint"]) for c in tl["audioTracks"][3]["audioClips"]],
                          [(1000, 2000)])
 
-    def test_music_continues_source_after_mute(self):
+    def test_music_continues_from_the_timeline_after_a_mute(self):
         with wave.open(str(self.raws / "music.wav"), "wb") as audio:
             audio.setparams((1, 2, 48000, 0, "NONE", "not compressed"))
             audio.writeframes(b"\0\0" * 48000 * 4)

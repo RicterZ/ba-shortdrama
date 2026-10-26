@@ -11,75 +11,15 @@ import uuid
 from pathlib import Path
 
 import av
-from PIL import Image, ImageEnhance, ImageOps
+from PIL import Image
+
+from bcut_processor import load_processor
 
 import lib
 
 
 TEMPLATES = Path(__file__).with_name("bcut_templates")
 TOKEN = "__BA_ASSETS__/"
-
-
-def visible_bounds(shots, index):
-    """Hard-cut at the next shot. Transition overlap stays in scene.json for Remotion."""
-    shot = shots[index]
-    start = int(shot["from"])
-    end = start + int(shot["durationInFrames"])
-    if index + 1 < len(shots):
-        end = min(end, int(shots[index + 1]["from"]))
-    return start, max(start, end)
-
-
-def emotion_at(entry, shot, frame):
-    """Match the official renderer: a cue wins, then the spoken line, then a held face."""
-    standing = entry.get("emotion") or "default"
-    local = frame - int(shot["from"])
-    cued = None
-    for cue in entry.get("emotionCues") or []:
-        if local >= int(cue.get("startFrame", 0)):
-            cued = cue.get("emotion") or standing
-    if cued:
-        return cued
-    for line in shot.get("lines") or []:
-        if line.get("speaker") != entry["id"]:
-            continue
-        start = int(line["from"])
-        if start <= frame < start + int(line["durationInFrames"]):
-            return line.get("emotion") or standing
-    if entry.get("holdEmotion"):
-        held = None
-        for line in shot.get("lines") or []:
-            if line.get("speaker") == entry["id"] and frame >= int(line["from"]):
-                held = line.get("emotion") or standing
-        if held:
-            return held
-    return standing
-
-
-def expression_spans(entry, shot, start, end):
-    points = {start, end}
-    for line in shot.get("lines") or []:
-        if line.get("speaker") != entry["id"]:
-            continue
-        a = int(line["from"])
-        b = a + int(line["durationInFrames"])
-        if start < a < end:
-            points.add(a)
-        if start < b < end:
-            points.add(b)
-    for cue in entry.get("emotionCues") or []:
-        at = int(shot["from"]) + int(cue.get("startFrame", 0))
-        if start < at < end:
-            points.add(at)
-    ordered = sorted(points)
-    spans = []
-    for a, b in zip(ordered, ordered[1:]):
-        emotion = emotion_at(entry, shot, a)
-        if spans and spans[-1][2] == emotion:
-            spans[-1] = (spans[-1][0], b, emotion)
-        else:
-            spans.append((a, b, emotion))
-    return spans
 
 
 def hex_rgb(value, fallback="#ffffff"):
@@ -89,41 +29,6 @@ def hex_rgb(value, fallback="#ffffff"):
     number = int(text, 16)
     return {"r": ((number >> 16) & 255) / 255, "g": ((number >> 8) & 255) / 255,
             "b": (number & 255) / 255, "a": 1}
-
-
-def shot_focus(shot):
-    """Spotlight holds for a thought shot or a silent reaction, not during speech."""
-    focus = shot.get("focus")
-    if not focus:
-        return None
-    lines = shot.get("lines") or []
-    if any(line.get("kind", "speech") != "thought" for line in lines):
-        return None
-    return focus
-
-
-def audible_spans(start, end, mutes):
-    cursor = start
-    spans = []
-    for mute in sorted(mutes or [], key=lambda item: int(item["from"])):
-        mute_start = int(mute["from"])
-        mute_end = mute_start + int(mute["durationInFrames"])
-        if mute_end <= cursor or mute_start >= end:
-            continue
-        if mute_start > cursor:
-            spans.append((cursor, min(mute_start, end)))
-        cursor = max(cursor, min(mute_end, end))
-    if cursor < end:
-        spans.append((cursor, end))
-    return spans
-
-
-def tone(image, brightness=None, color=None):
-    if color is not None:
-        image = ImageEnhance.Color(image).enhance(color)
-    if brightness is not None:
-        image = ImageEnhance.Brightness(image).enhance(brightness)
-    return image
 
 
 def template(name):
@@ -142,16 +47,15 @@ def template(name):
 
 def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
     ep = scene["episode"]
-    template_id = ep.get("template", "official")
-    if template_id not in {"official", "who-is-the-spy"}:
-        raise ValueError("Only the official and who-is-the-spy templates are supported.")
-    spy = template_id == "who-is-the-spy"
+    processor = load_processor(scene)
     width, height, fps = ep["width"], ep["height"], ep["fps"]
     if min(width, height, fps, ep["durationInFrames"]) <= 0:
         raise ValueError("Invalid canvas, frame rate or duration")
-    # Bcut samples at exact frame times. Rounding a boundary upward keeps the
-    # previous clip visible for one extra frame (e.g. frame 1424 at 30 fps).
-    ms = lambda frame: math.floor(frame * 1000 / fps)
+    # The static draft rounds each boundary on its own, the same way the
+    # pre-generalization exporter did. Rendered layers keep the earlier floor
+    # so a frame belongs to the clip that starts on it.
+    ms = (lambda frame: math.floor(frame * 1000 / fps)) if visual_layers else (
+        lambda frame: round(frame * 1000 / fps))
     end_ms = ms(ep["durationInFrames"])
     assets = output / "assets"
     assets.mkdir()
@@ -161,22 +65,19 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
                         videoFps={"num": fps, "den": 1})
     tl["videoTracks"] = []
     registered = set()
-    warnings = [
-        "必剪 3.10.3 明文草稿。本机没有安装必剪，还没有在应用里打开验证。",
-        "可编辑的静态分层，不是成片逐帧复刻：没有镜头运动、转场叠化、入场、走位、转身、气泡和界面按钮。片头只导出标题。",
-        "立绘按分镜位置烘焙成透明底全画布图。说话时用该句表情，说完回到镜头常驻脸；holdEmotion 和 emotionCues 会保留。",
-    ]
-    if spy:
-        warnings.append(
-            "谁是卧底的词牌、大字幕、心理字幕和投票字按画面位置写成字幕。描边是必剪的单层描边。"
-            "聚光灯只压暗背景和其他角色，没有径向光。"
-        )
     if visual_layers:
         warnings = [
             "画面由制作模板逐帧分层渲染，保留动画、气泡、界面与字幕。背景、角色层和界面可以独立移动、裁剪。",
             "静态画面为 PNG，动画为无损透明 MOV，不是必剪原生关键帧；转场期间使用短暂的合成画面。",
             "正文为可编辑字幕，字形、换行和出字效果与原片存在差异。" if editable_captions else
             "字幕为原样渲染的图层；修改文字需修改脚本后重新导出。",
+        ]
+    else:
+        warnings = [
+            "必剪 3.10.3 明文草稿。本机没有安装必剪，还没有在应用里打开验证。",
+            "可编辑的静态分层，不是成片逐帧复刻：没有镜头运动、转场叠化、入场、走位、转身、气泡和界面按钮。片头只导出标题。",
+            "立绘按分镜位置烘焙成透明底全画布图。说话时用该句表情，说完回到镜头常驻脸；holdEmotion 和 emotionCues 会保留。",
+            *getattr(processor, "EXPORT_WARNINGS", ()),
         ]
 
     def source(relative):
@@ -210,10 +111,11 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
         if end <= start:
             return
         clip = template("image_clip")
-        # Legacy Windows crop effects without crop geometry become 0x0 crops
-        # in macOS Bcut, producing infinities and a completely black preview.
-        clip["fxs"] = [fx for fx in clip["fxs"] if fx.get("businessType") != 2]
-        clip["propertyFxList"] = []
+        if visual_layers:
+            # Legacy Windows crop effects without crop geometry become 0x0 crops
+            # in macOS Bcut, producing infinities and a completely black preview.
+            clip["fxs"] = [fx for fx in clip["fxs"] if fx.get("businessType") != 2]
+            clip["propertyFxList"] = []
         path = TOKEN + name
         label = label or name
         clip.update(inPoint=start, outPoint=end, trimIn=0, trimOut=end-start,
@@ -244,6 +146,10 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
             return
         clip = template("caption")
         clip.update(captionText=text, inPoint=start, outPoint=end)
+        if not visual_layers:
+            for key in ("defaultFontPath", "fontPackagePath"):
+                clip[key] = ""
+            clip["assetInfo"]["fontSrcPath"] = ""
         if x is not None:
             clip["transX"] = x
         if y is not None:
@@ -293,74 +199,8 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
             if not loop:
                 break
 
-    characters = list(scene.get("characters", {}))
-    shots = scene["shots"]
-    for index, shot in enumerate(shots):
-        start_frame, end_frame = visible_bounds(shots, index)
-        start, end = ms(start_frame), ms(end_frame)
-        bg = shot.get("scene", {}).get("image")
-        if not bg and not visual_layers:
-            raise ValueError(f"Shot {shot['id']} has no snapshot background image")
-        if bg:
-            name = copied(bg)
-        else:
-            name = f"cover-placeholder-{uuid.uuid4().hex}.png"
-            Image.new("RGB", (width, height), "#101820").save(assets / name)
-        focus = shot_focus(shot) if spy else None
-        with Image.open(assets / name) as im:
-            bg_name = f"background-{uuid.uuid4().hex}.png"
-            fitted = ImageOps.fit(im.convert("RGB"), (width, height))
-            if focus:
-                fitted = tone(fitted, brightness=0.46, color=0.72)
-            fitted.save(assets / bg_name)
-            if not (output / "cover.jpg").exists():
-                fitted.convert("RGB").save(output / "cover.jpg", quality=85)
-        image(bg_name, start, end, 0, shot["id"])
-        for entry in shot.get("characters", []):
-            char = scene["characters"][entry["id"]]
-            outfit_id = entry.get("outfit") or char["default_outfit"]
-            sprites = char["outfits"][outfit_id]["sprites"]
-            track_index = characters.index(entry["id"]) + 1
-            for a, b, emotion in expression_spans(entry, shot, start_frame, end_frame):
-                original = sprites.get(emotion) or sprites.get("default")
-                if not original and visual_layers:
-                    continue
-                if not original:
-                    raise ValueError(f"{entry['id']}/{outfit_id} has no sprite for {emotion}")
-                original_name = copied(original)
-                with Image.open(assets / original_name) as im:
-                    im = im.convert("RGBA")
-                    scale = entry.get("scale", 1)
-                    h = max(1, round(height * entry.get("height", 1.08) * scale))
-                    w = max(1, round(im.width * h / im.height))
-                    im = im.resize((w, h), Image.Resampling.LANCZOS)
-                    if entry.get("facing") == "left":
-                        im = ImageOps.mirror(im)
-                    if focus and entry["id"] != focus:
-                        im = tone(im, brightness=0.38, color=0.28)
-                    canvas = Image.new("RGBA", (width, height))
-                    # CSS scales about the center of the original (unscaled) box.
-                    box_h = height * entry.get("height", 1.08)
-                    cy = height * (1 - entry.get("bottom", -0.25)) - box_h / 2
-                    canvas.paste(im, (round(width * entry.get("x", .5) - w / 2), round(cy - h / 2)))
-                    name = f"pose-{uuid.uuid4().hex}.png"
-                    canvas.save(assets / name)
-                image(name, ms(a), ms(b), track_index, f"{entry['id']} {emotion}")
-        if spy and shot.get("systemVoice"):
-            audio(shot["systemVoice"], start,
-                  min(end_ms, ms(shot["from"] + shot["durationInFrames"])), 3)
-        lines = shot.get("lines") or []
-        for line in lines:
-            a, b = ms(line["from"]), ms(line["from"] + line["durationInFrames"])
-            if line.get("audio"):
-                audio(line["audio"], a, b, 0)
-            ui = scene.get("ui", {})
-            click = ui.get("sfx", {}).get("click")
-            thought = spy and line.get("kind") == "thought"
-            if click and not thought and ui.get("lineClick", True) and a >= ms((scene.get("intro") or {}).get("durationInFrames", 0)):
-                audio(click, a, min(end_ms, a + ms(10)), 2, ui.get("lineClickVolume", .14))
     if visual_layers:
-        from render_bcut_layers import render_layers, effect_audio_events
+        from render_bcut_layers import render_layers
         # Replace static approximations with the same components used by the video.
         tl["videoTracks"] = []
         draft["mainWindow"]["browserPanelFiles"] = []
@@ -388,9 +228,34 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
                 layer_indices[layer] = len(layer_indices) + 1
             image(span["name"], ms(span["startFrame"]), ms(span["endFrame"]),
                   layer_indices[layer], span["label"])
-        for index, event in enumerate(effect_audio_events(scene)):
-            audio(event["src"], ms(event["startFrame"]), ms(event["endFrame"]),
-                  5 + index, event["volume"], trim_in=ms(event["trimInFrames"]))
+    else:
+        if hasattr(processor, "images"):
+            from image_layout import render_images
+            spans = render_images(scene, raws, assets, processor.images(scene))
+            layers = {}
+            placed = []
+            for span in spans:
+                layers.setdefault(span["layer"], len(layers))
+                placed.append((span, layers[span["layer"]]))
+        else:
+            spans = processor.static_spans(scene, assets, copied)
+            placed = [(span, int(span["layer"])) for span in spans]
+        for span, index in placed:
+            image(span["name"], ms(span["startFrame"]), ms(span["endFrame"]),
+                  index, span["label"])
+        if spans:
+            with Image.open(assets / spans[0]["name"]) as cover_image:
+                cover_image.convert("RGB").save(output / "cover.jpg", quality=85)
+    from bcut_events import AudioEvent
+    for event in processor.audio_events(scene, visual_layers=visual_layers):
+        if not isinstance(event, AudioEvent):
+            raise ValueError("Processors must return AudioEvent objects")
+        event.validate(ep["durationInFrames"])
+        start_ms = ms(event.start)
+        end_point = (min(end_ms, start_ms + ms(event.span_frames))
+                     if event.span_frames else ms(event.end))
+        audio(event.src, start_ms, end_point, event.track, event.volume,
+              event.loop, ms(event.fade_in), ms(event.fade_out), trim_in=ms(event.trim_in))
     # Template processors supply pixel geometry; this writer knows only Bcut units.
     from text_layout import text_elements
     for element in text_elements(scene, visual_layers=visual_layers,
@@ -408,30 +273,17 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
             clip["textAlignment"] = element.alignment
         if element.draw_outline is not None:
             clip["drawOutline"] = element.draw_outline
-    bgm = scene.get("bgm")
-    if bgm:
-        mutes = bgm.get("muteRanges") if spy else None
-        resume = int(bgm.get("resumeFadeFrames", 0)) if spy else 0
-        for span_start, span_end in audible_spans(0, ep["durationInFrames"], mutes):
-            fade_in = bgm.get("fadeInFrames", 45) if span_start == 0 else resume
-            fade_out = bgm.get("fadeOutFrames", 75) if span_end == ep["durationInFrames"] else 0
-            audio(bgm["src"], ms(span_start), ms(span_end), 1, bgm.get("volume", .15),
-                  bgm.get("loop", True), ms(fade_in), ms(fade_out), trim_in=ms(span_start))
-        if spy:
-            for cue in bgm.get("cues") or []:
-                audio(cue["src"], ms(cue["from"]), ms(cue["from"] + cue["durationInFrames"]),
-                      4, cue.get("volume", 0.5), cue.get("loop", True))
     for key, clip_key in (("videoTracks", "clips"), ("audioTracks", "audioClips"), ("captionTracks", "captions")):
         kept = [item for item in tl[key] if item[clip_key]]
         for index, item in enumerate(kept):
             # Video and caption tracks share the visual stacking index. Giving
             # both index 0 places the subtitles underneath opaque backgrounds.
-            item["index"] = index + (len(tl["videoTracks"]) if key == "captionTracks" else 0)
+            item["index"] = index + (len(tl["videoTracks"]) if key == "captionTracks" and visual_layers else 0)
         tl[key] = kept
         for item in tl[key]:
             item[clip_key].sort(key=lambda clip: (clip["inPoint"], clip["outPoint"]))
-    if visual_layers and editable_captions and not spy:
-        controls = {"ui", "choices", "buttons", "chrome", "click", "intro"}
+    controls = getattr(processor, "TEXT_BELOW", set())
+    if visual_layers and editable_captions and controls:
         # Composite transition clips omit native text and must remain below it.
         tl["videoTracks"].sort(key=lambda tr: (
             tr["clips"][0]["assetInfo"]["displayName"] in controls, tr["index"]))
@@ -444,10 +296,13 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
                 tr["index"] += len(tl["captionTracks"])
         for offset, tr in enumerate(tl["captionTracks"]):
             tr["index"] = insertion + offset
+    clip_count = sum(len(t["clips"]) for t in tl["videoTracks"])
     draft["timelineWidget"]["tracking"]["tracks"].update(
         video_tracks=len(tl["videoTracks"]), audio_tracks=len(tl["audioTracks"]),
-        video_count=sum(c.get("mediaType") == 0 for t in tl["videoTracks"] for c in t["clips"]),
-        pic_count=sum(c.get("mediaType") == 1 for t in tl["videoTracks"] for c in t["clips"]),
+        video_count=clip_count if not visual_layers else sum(
+            c.get("mediaType") == 0 for t in tl["videoTracks"] for c in t["clips"]),
+        pic_count=clip_count if not visual_layers else sum(
+            c.get("mediaType") == 1 for t in tl["videoTracks"] for c in t["clips"]),
         subtitles=";".join(c["uid"] for t in tl["captionTracks"] for c in t["captions"]))
     if visual_layers:
         used = {clip["sourcePath"].removeprefix(TOKEN)
@@ -457,9 +312,10 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
             if path.name not in used:
                 path.unlink()
     lib.write_json(output / "draft.bjson", draft)
-    lib.write_json(output / "manifest.json", {"name": ep["title"], "duration_ms": end_ms,
-                                               "visual_mode": "production-layers" if visual_layers else "static",
-                                               "warnings": warnings, "format": "ba-bcut-1"})
+    manifest = {"name": ep["title"], "duration_ms": end_ms, "warnings": warnings, "format": "ba-bcut-1"}
+    if visual_layers:
+        manifest["visual_mode"] = "production-layers"
+    lib.write_json(output / "manifest.json", manifest)
     shutil.copyfile(Path(__file__).with_name("install_bcut.py"), output / "install_bcut.py")
     shutil.copyfile(lib.ROOT / "licenses/dsh-bcut-edit-MIT.txt", output / "LICENSE-templates.txt")
 

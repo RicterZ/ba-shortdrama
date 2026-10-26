@@ -15,7 +15,8 @@ if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error('Invalid 
 mkdirSync(assets, {recursive: true});
 mkdirSync(scratch, {recursive: true});
 const template = scene.episode.template || 'official';
-if (!['official', 'who-is-the-spy'].includes(template)) throw new Error('Unsupported template');
+if (!/^[a-zA-Z0-9_-]+$/.test(template)) throw new Error('Invalid template name');
+if (!existsSync(path.join(root, `templates/${template}/bcut.py`))) throw new Error('Missing Bcut processor');
 const serveUrl = await bundle({entryPoint: path.join(root, `templates/${template}/index.tsx`),
   publicDir: raws, outDir: path.join(scratch, 'bundle'), rootDir: root});
 const chrome = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';

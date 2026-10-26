@@ -12,11 +12,12 @@ def layout(scene, *, visual_layers=False, editable_captions=False):
     intro_end = intro.get("durationInFrames", 0)
     meme = not visual_layers or ep.get("style", {}).get("caption_style", "ba") == "meme"
 
-    def positioned(text, start, end, size, *, track=0, x=.5, top=None,
+    def positioned(text, start, end, size, *, track=0, x=None, top=None,
                    bottom=None, color=None, outline=None, rotation=None):
         center_y = top + size * 1.12 / 2 if top is not None else 1 - bottom - size * 1.12 / 2
         return TextElement(text, start, end, track=track,
-            center_x=min(.92, max(.08, x)) * width, center_y=center_y * height,
+            center_x=None if x is None else min(.92, max(.08, x)) * width,
+            center_y=center_y * height,
             font_size=size * height, color=color, outline=outline, rotation=rotation)
 
     def meme_text(text, start, end, speaker=None, thought=False):

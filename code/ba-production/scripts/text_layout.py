@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import importlib.util
 import math
-from pathlib import Path
-import re
+from bcut_processor import load_processor
 
 
 @dataclass(frozen=True)
@@ -38,15 +36,12 @@ class TextElement:
 
 def text_elements(scene, *, visual_layers=False, editable_captions=False):
     """Discover a processor beside the template, without a template-name registry."""
-    name = scene["episode"].get("template", "official")
-    if not re.fullmatch(r"[a-zA-Z0-9_-]+", name):
-        raise ValueError("Invalid template name")
-    path = Path(__file__).resolve().parents[1] / "templates" / name / "text_layout.py"
-    if not path.is_file():
-        raise ValueError(f"Template {name} has no text layout processor")
-    spec = importlib.util.spec_from_file_location(f"template_text_{name}", path)
-    processor = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(processor)
+    try:
+        processor = load_processor(scene, "text_layout.py")
+    except ValueError as exc:
+        if "has no text_layout.py" in str(exc):
+            return []
+        raise
     elements = list(processor.layout(scene, visual_layers=visual_layers,
                                      editable_captions=editable_captions))
     for element in elements:
