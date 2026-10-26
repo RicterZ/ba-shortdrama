@@ -11,6 +11,7 @@ from PIL import Image
 
 import export_bcut
 import install_bcut
+import text_layout
 from render_bcut_layers import effect_audio_events, render_layers, layer_frame_ranges, render_jobs, default_layers
 
 
@@ -125,6 +126,56 @@ class BcutTests(unittest.TestCase):
         self.assertLess(layers.index("votes"), layers.index("buttons"))
         self.assertLess(layers.index("buttons"), layers.index("thought"))
         self.assertLess(layers.index("meme"), layers.index("chrome"))
+
+    def test_template_pixel_layout_maps_to_native_text(self):
+        element = text_layout.TextElement("Custom layout", 15, 45,
+            center_x=50, center_y=25, font_size=8.4, track=2,
+            color="#ff0000", alignment=0, draw_outline=False)
+        with patch("text_layout.text_elements", return_value=[element]):
+            export_bcut.build(self.scene, self.raws, self.bundle)
+        draft = json.loads((self.bundle / "draft.bjson").read_text())
+        clip = draft["timelineWidget"]["timeline"]["captionTracks"][0]["captions"][0]
+        self.assertEqual((clip["captionText"], clip["inPoint"], clip["outPoint"]),
+                         ("Custom layout", 500, 1500))
+        self.assertEqual((clip["transX"], clip["transY"], clip["scaleX"]), (-.5, .5, 1.12))
+        self.assertEqual(clip["textColor"], {"r": 1, "g": 0, "b": 0, "a": 1})
+        self.assertFalse(clip["drawOutline"])
+        self.assertEqual(clip["textAlignment"], 0)
+
+    def test_new_template_text_processor_needs_no_registry_entry(self):
+        scripts = self.root / "scripts"
+        scripts.mkdir()
+        processor = self.root / "templates" / "third-template"
+        processor.mkdir(parents=True)
+        (processor / "text_layout.py").write_text(
+            'from text_layout import TextElement\n'
+            'def layout(scene, **kwargs):\n'
+            '    yield TextElement("Third", 0, 10, center_x=12, font_size=8)\n')
+        self.scene["episode"]["template"] = "third-template"
+        with patch.object(text_layout, "__file__", str(scripts / "text_layout.py")):
+            elements = text_layout.text_elements(self.scene)
+        self.assertEqual(elements[0].text, "Third")
+        self.assertEqual(elements[0].center_x, 12)
+
+    def test_invalid_template_text_fails_before_draft_is_written(self):
+        for values in ({"font_size": 0}, {"center_x": float("nan")},
+                       {"rotation": float("inf")}, {"start": -1}, {"end": 0}):
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                text_layout.TextElement(**{"text": "X", "start": 0, "end": 10, **values}).validate()
+        self.scene["episode"]["template"] = "../official"
+        with self.assertRaises(ValueError):
+            text_layout.text_elements(self.scene)
+
+    def test_official_processor_owns_dialogue_layout_and_prompt_gaps(self):
+        self.scene["intro"] = {"durationInFrames": 20}
+        self.scene["shots"][0]["choices"] = {"prompt": "Pick one"}
+        elements = text_layout.text_elements(self.scene, visual_layers=True, editable_captions=True)
+        self.assertEqual([(e.text, e.start, e.end) for e in elements],
+                         [("Hello", 20, 50), ("Pick one", 50, 90)])
+        self.assertAlmostEqual(elements[0].center_y, 100 * (.76 + .038 * 1.12 / 2))
+        self.assertAlmostEqual(elements[0].font_size, 3.192)
+        self.assertFalse(elements[0].draw_outline)
+        self.assertEqual(text_layout.text_elements(self.scene, visual_layers=True), [])
 
     def test_main_track_cannot_ripple_intro_and_transition_gaps(self):
         def rendered(scene, raws, assets, **kwargs):

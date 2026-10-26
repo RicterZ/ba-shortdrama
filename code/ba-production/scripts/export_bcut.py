@@ -91,30 +91,6 @@ def hex_rgb(value, fallback="#ffffff"):
             "b": (number & 255) / 255, "a": 1}
 
 
-def caption_scale(size_frac):
-    """Map a frame-height fraction onto the draft template's subtitle scale."""
-    return round(0.56 * (size_frac / 0.042), 4)
-
-
-def caption_x(value):
-    clamped = min(0.92, max(0.08, float(value)))
-    return round((clamped - 0.5) * 2, 4)
-
-
-def caption_y_top(top_frac, size_frac):
-    center = top_frac + size_frac * 1.12 / 2
-    return round(1 - 2 * center, 4)
-
-
-def caption_y_bottom(bottom_frac, size_frac):
-    center = 1 - bottom_frac - size_frac * 1.12 / 2
-    return round(1 - 2 * center, 4)
-
-
-def meme_size(text, base, width_frac):
-    return min(base, width_frac / (max(1, len(text)) * 1.02))
-
-
 def shot_focus(shot):
     """Spotlight holds for a thought shot or a silent reaction, not during speech."""
     focus = shot.get("focus")
@@ -284,17 +260,6 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
         clip["assetInfo"].update(content=text, displayName=text, duration=end-start)
         track("caption", index).append(clip)
 
-    def native_dialogue(text, start, end):
-        lines = text.splitlines() or [text]
-        advance = max(sum(1 if ord(c) > 255 else .55 for c in row) for row in lines)
-        text_width = advance * height * .038
-        caption(text, ms(start), ms(end),
-                x=2 * (.09 + text_width / width / 2 - .5),
-                y=caption_y_top(.76, .038 * len(lines)), scale=.4256)
-        if end > start and text:
-            item = tl["captionTracks"][0]["captions"][-1]
-            item.update(drawOutline=False, textAlignment=0)
-
     def audio(relative, start, end, index, volume=1, loop=False, fade_in=0, fade_out=0, trim_in=0):
         if not math.isfinite(volume) or volume < 0:
             raise ValueError("Invalid audio volume")
@@ -381,44 +346,12 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
                     name = f"pose-{uuid.uuid4().hex}.png"
                     canvas.save(assets / name)
                 image(name, ms(a), ms(b), track_index, f"{entry['id']} {emotion}")
-            if not spy:
-                continue
-            label = entry.get("label") or {}
-            if not label.get("text"):
-                continue
-            label_end = end_frame
-            motion = entry.get("motion") or {}
-            if motion.get("startFrame") is not None:
-                label_end = min(label_end, int(shot["from"]) + int(motion["startFrame"]))
-            secret = label.get("tone") == "secret"
-            size = 0.058
-            caption(label["text"], ms(start_frame), ms(label_end), 1,
-                    x=caption_x(entry.get("x", 0.5)), y=caption_y_top(0.018, size),
-                    scale=caption_scale(size), rotation=label.get("rotate", -3),
-                    color="#ff9ab7" if secret else "#a9dcff",
-                    outline="#ff5f8f" if secret else "#123a5a")
         if spy and shot.get("systemVoice"):
             audio(shot["systemVoice"], start,
                   min(end_ms, ms(shot["from"] + shot["durationInFrames"])), 3)
         lines = shot.get("lines") or []
         for line in lines:
             a, b = ms(line["from"]), ms(line["from"] + line["durationInFrames"])
-            shown = line["text"].replace("。", "") if spy else line["text"]
-            if spy and line.get("kind") == "thought":
-                size = meme_size(shown, 0.048, 0.7)
-                caption(shown, a, b, y=caption_y_bottom(0.17, size), scale=caption_scale(size),
-                        color="#ffffff", outline="#0b1119", rotation=-1)
-            elif spy and (not visual_layers or ep.get("style", {}).get("caption_style", "ba") == "meme"):
-                size = meme_size(shown, 0.098, 0.84)
-                color = scene["characters"].get(line["speaker"], {}).get("color", "#ffffff")
-                caption(shown, a, b, y=caption_y_bottom(0.06, size), scale=caption_scale(size),
-                        color=color, outline=color, rotation=-1.2)
-            else:
-                if visual_layers and editable_captions:
-                    native_dialogue(shown, max(line["from"], (scene.get("intro") or {}).get("durationInFrames", 0)),
-                                    line["from"] + line["durationInFrames"])
-                else:
-                    caption(shown, a, b)
             if line.get("audio"):
                 audio(line["audio"], a, b, 0)
             ui = scene.get("ui", {})
@@ -426,31 +359,13 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
             thought = spy and line.get("kind") == "thought"
             if click and not thought and ui.get("lineClick", True) and a >= ms((scene.get("intro") or {}).get("durationInFrames", 0)):
                 audio(click, a, min(end_ms, a + ms(10)), 2, ui.get("lineClickVolume", .14))
-        if spy and shot.get("voteTags"):
-            vote_from = max(line["from"] + line["durationInFrames"] for line in lines) if lines else start_frame
-            vote_from = max(start_frame, vote_from)
-            for tag in shot["voteTags"]:
-                speaker = next((entry for entry in shot.get("characters", [])
-                                if entry["id"] == tag.get("speaker")), None)
-                if not speaker or not tag.get("text") or vote_from >= end_frame:
-                    continue
-                size = 0.05
-                caption(tag["text"], ms(vote_from), ms(end_frame), 2,
-                        x=caption_x(speaker.get("x", 0.5)), y=caption_y_top(0.62, size),
-                        scale=caption_scale(size), rotation=-2,
-                        color=scene["characters"].get(tag["speaker"], {}).get("color", "#ffffff"),
-                        outline="#08111f")
-    intro = scene.get("intro") or {}
-    if not visual_layers:
-        caption(intro.get("title"), 0, ms(intro.get("durationInFrames", 0)))
     if visual_layers:
         from render_bcut_layers import render_layers, effect_audio_events
         # Replace static approximations with the same components used by the video.
         tl["videoTracks"] = []
         draft["mainWindow"]["browserPanelFiles"] = []
         registered.clear()
-        if not (editable_captions and spy):
-            tl["captionTracks"] = []
+        tl["captionTracks"] = []
         spans = render_layers(scene, raws, assets, editable_captions=editable_captions)
         cover = Image.new("RGBA", (width, height))
         for span in spans:
@@ -476,31 +391,23 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
         for index, event in enumerate(effect_audio_events(scene)):
             audio(event["src"], ms(event["startFrame"]), ms(event["endFrame"]),
                   5 + index, event["volume"], trim_in=ms(event["trimInFrames"]))
-        if editable_captions:
-            for shot in shots:
-                for line in ([] if spy else shot.get("lines", [])):
-                    start = max(line["from"], intro.get("durationInFrames", 0))
-                    end = min(line["from"] + line["durationInFrames"],
-                              shot["from"] + shot["durationInFrames"])
-                    # Bcut's transform positions the text box by its center.
-                    # Approximate CJK advance to retain the production left edge.
-                    native_dialogue(line["text"], start, end)
-                prompt = (shot.get("choices") or {}).get("prompt")
-                if prompt:
-                    start = max(shot["from"], intro.get("durationInFrames", 0))
-                    end = shot["from"] + shot["durationInFrames"]
-                    occupied = [{"from": line["from"], "durationInFrames": line["durationInFrames"]}
-                                for line in shot.get("lines", [])]
-                    for a, b in audible_spans(start, end, occupied):
-                        if spy and ep.get("style", {}).get("caption_style", "ba") == "meme":
-                            text = prompt.replace("。", "")
-                            size = meme_size(text, .098, .84)
-                            speaker = (shot.get("lines") or [{}])[-1].get("speaker")
-                            color = scene["characters"].get(speaker, {}).get("color", "#ffffff")
-                            caption(text, ms(a), ms(b), y=caption_y_bottom(.06, size),
-                                    scale=caption_scale(size), color=color, outline=color, rotation=-1.2)
-                        else:
-                            native_dialogue(prompt, a, b)
+    # Template processors supply pixel geometry; this writer knows only Bcut units.
+    from text_layout import text_elements
+    for element in text_elements(scene, visual_layers=visual_layers,
+                                 editable_captions=editable_captions):
+        if not element.text or ms(element.end) <= ms(element.start):
+            continue
+        scale = (round(0.56 * element.font_size / height / .042, 4)
+                 if element.font_size is not None else None)
+        caption(element.text, ms(element.start), ms(element.end), element.track,
+                x=round(2 * element.center_x / width - 1, 4) if element.center_x is not None else None,
+                y=round(1 - 2 * element.center_y / height, 4) if element.center_y is not None else None,
+                scale=scale, color=element.color, outline=element.outline, rotation=element.rotation)
+        clip = tl["captionTracks"][element.track]["captions"][-1]
+        if element.alignment is not None:
+            clip["textAlignment"] = element.alignment
+        if element.draw_outline is not None:
+            clip["drawOutline"] = element.draw_outline
     bgm = scene.get("bgm")
     if bgm:
         mutes = bgm.get("muteRanges") if spy else None
