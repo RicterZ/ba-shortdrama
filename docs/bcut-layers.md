@@ -1,6 +1,6 @@
 ## 必剪视觉分层
 
-`npm run ep:bcut` 默认走这条逐帧分层。公共导出器只写轨道；图层顺序、恒定帧和转场合成由模板目录里的 `bcut.py` 决定，`official` 与 `who-is-the-spy` 的调度与 `c44f527` 一致。默认字幕画在图层里。`--captions editable` 才把正文留给必剪原生字幕。
+`npm run ep:bcut` 默认是关键帧模式（见 `WORKFLOW.md`「导出到必剪」）。本文描述的逐帧分层需要 `export_bcut.py --mode rendered`，验收结束后会移除。公共导出器只写轨道；图层顺序、恒定帧和转场合成由模板目录里的 `bcut.py` 决定，`official` 与 `who-is-the-spy` 的调度与 `c44f527` 一致。默认字幕画在图层里。`--captions editable` 才把正文留给必剪原生字幕。
 
 `render_bcut_layers.py` 直接调用制作视频所用的 Remotion 模板，把背景、角色、界面、字幕以及片头分别渲染为透明 PNG，再将动态片段编码为保留 alpha 的 MOV。动态部分逐帧渲染、不抽帧；已证明恒定的背景、固定按钮栏，以及进场结束且没有动作、移动、转身、气泡的 official 角色状态复用同一渲染帧。复用状态按说话人、压暗、表情、光照等实际输入区分。组件未挂载的时段直接留空。连续且内容相同的帧合并为一个素材片段。画布大小、帧率和时间都来自 `scene.json`。
 

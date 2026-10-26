@@ -25,7 +25,7 @@ def layout(scene, *, visual_layers=False, editable_captions=False):
         size = min(.048 if thought else .098, (.7 if thought else .84) / (max(1, len(text)) * 1.02))
         color = "#ffffff" if thought else scene["characters"].get(speaker, {}).get("color", "#ffffff")
         return positioned(text, start, end, size, bottom=.17 if thought else .06,
-            color=color, outline="#0b1119" if thought else color, rotation=-1 if thought else -1.2)
+            color=color, outline="#0b1119" if thought else "#ffffff", rotation=-1 if thought else -1.2)
 
     for index, shot in enumerate(scene["shots"]):
         start = shot["from"]

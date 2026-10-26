@@ -22,6 +22,7 @@
     "fx": "uv run python scripts/preview_fx.py"
   },
   "dependencies": {
+    "@esotericsoftware/spine-core": "~4.2",
     "@remotion/cli": "4.0.417",
     "@remotion/transitions": "4.0.417",
     "react": "19.2.3",

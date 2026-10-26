@@ -55,9 +55,15 @@ class BcutTests(unittest.TestCase):
     def test_layers_timing_and_loop(self):
         draft = self.build()
         tl = draft["timelineWidget"]["timeline"]
-        self.assertEqual(len(tl["videoTracks"]), 2)
+        self.assertEqual([tr["clips"][0]["assetInfo"]["displayName"].split()[0] for tr in tl["videoTracks"][2:]],
+                         ["对话框", "▼", "界面按钮"])
+        cursor = tl["videoTracks"][3]["clips"]
+        self.assertTrue(cursor and all(c["sourcePath"].endswith(".mov") for c in cursor))
         pose = tl["videoTracks"][1]["clips"]
         self.assertEqual([(c["inPoint"], c["outPoint"]) for c in pose], [(0, 3000)])
+        box = tl["videoTracks"][2]["clips"]
+        self.assertEqual([(c["inPoint"], c["outPoint"]) for c in box], [(333, tl["captionTracks"][0]["captions"][0]["outPoint"])])
+        self.assertTrue(box[0]["assetInfo"]["displayName"].startswith("对话框"))
         self.assertEqual(tl["captionTracks"][0]["captions"][0]["inPoint"], 333)
         self.assertTrue((self.bundle / "cover.jpg").is_file())
         voice = tl["audioTracks"][0]["audioClips"][0]
@@ -67,10 +73,34 @@ class BcutTests(unittest.TestCase):
                          [(0, 1000), (1000, 2000), (2000, 3000)])
         self.assertAlmostEqual(music[0]["fxs"][0]["gainValue"], -6.0206, places=4)
 
-    def test_static_clips_keep_template_effects(self):
+    def test_image_clips_drop_geometryless_crop(self):
         draft = self.build()
         clips = [clip for track in draft["timelineWidget"]["timeline"]["videoTracks"] for clip in track["clips"]]
-        self.assertTrue(any(fx.get("businessType") == 2 for clip in clips for fx in clip["fxs"]))
+        self.assertFalse(any(fx.get("businessType") == 2 for clip in clips for fx in clip["fxs"]))
+
+    def test_motion_becomes_transform_keyframes(self):
+        entry = self.scene["shots"][0]["characters"][0]
+        entry.update(x=.25, bottom=0, height=1, motion={"startFrame": 30, "endFrame": 60, "toX": .75, "ease": "linear"})
+        draft = self.build()
+        clip = draft["timelineWidget"]["timeline"]["videoTracks"][1]["clips"][0]
+        keys = next(fx for fx in clip["fxs"] if fx["fxName"] == "Transform 2D" and fx["businessType"] == 1)["keyFrameInfos"]
+        trans = [(k["timePosition"], k["transX"], k["transY"]) for k in keys if k["paramID"] == "Trans X"]
+        self.assertEqual(trans[0], (0, 0, 0))
+        self.assertEqual(trans[-1], (3000, 1.0, 0))
+        self.assertIn((1500, 0.5, 0), trans)
+        self.assertTrue(draft["timelineWidget"]["tracking"]["tracks"]["KeyFrame"])
+
+    def test_fade_in_scales_about_canvas_centre(self):
+        entry = self.scene["shots"][0]["characters"][0]
+        entry.update(x=.75, bottom=0, height=1, entrance="fade-in",
+                     motion={"startFrame": 30, "endFrame": 60, "toScale": 2, "ease": "linear"})
+        clip = self.build()["timelineWidget"]["timeline"]["videoTracks"][1]["clips"][0]
+        keys = next(fx for fx in clip["fxs"] if fx["businessType"] == 1)["keyFrameInfos"]
+        opacity = [(k["timePosition"], k["opacity"]) for k in keys if k["paramID"] == "Opacity"]
+        self.assertEqual((opacity[0], opacity[-1][1]), ((0, 0), 1))
+        last = [k for k in keys if k["timePosition"] == 3000]
+        self.assertEqual({k["paramID"]: k.get("scaleX", k.get("transX")) for k in last if k["paramID"] != "Opacity"},
+                         {"Scale X": 2, "Trans X": -0.5})
 
     def test_caption_tracks_follow_creation_order(self):
         self.scene["episode"]["template"] = "who-is-the-spy"
@@ -78,7 +108,38 @@ class BcutTests(unittest.TestCase):
         self.scene["shots"][0]["voteTags"] = [{"speaker": "c", "text": "Vote"}]
         timeline = self.build()["timelineWidget"]["timeline"]
         self.assertEqual([track["index"] for track in timeline["videoTracks"]], [0, 1])
-        self.assertEqual([track["index"] for track in timeline["captionTracks"]], [0, 1, 2])
+        self.assertEqual([track["index"] for track in timeline["captionTracks"]], [2, 3, 4])
+
+    def test_action_presets_keep_their_transform_origin(self):
+        import ba_scene
+        entry = {"id": "c", "x": .3, "bottom": -.2, "height": 1, "actions": [{"name": "closeup", "startFrame": 0}]}
+        shot = {"from": 0, "durationInFrames": 30}
+        key = ba_scene.pose_keyframes(entry, shot, 0, 30, 1280, 720)[-1]
+        self.assertEqual(key["scale"], 1.5)
+        # The sprite's bottom centre stays put when Bcut scales about the canvas centre.
+        foot = (2 * .3 - 1, 1 - 2 * 1.2)
+        self.assertAlmostEqual(key["transX"] + 1.5 * foot[0], foot[0], places=4)
+        self.assertAlmostEqual(key["transY"] + 1.5 * foot[1], foot[1], places=4)
+
+    def test_turn_splits_facing_and_squeezes_scale_x(self):
+        import ba_scene
+        entry = {"id": "c", "x": .5, "turns": [{"to": "left", "startFrame": 10, "durationInFrames": 6}]}
+        shot = {"from": 0, "durationInFrames": 30}
+        self.assertEqual(ba_scene.facing_spans(entry, shot, 0, 30), [(0, 14, "right"), (14, 30, "left")])
+        keys = {k["frame"]: k for k in ba_scene.pose_keyframes(entry, shot, 0, 30, 1280, 720)}
+        self.assertEqual((keys[10]["scaleX"], keys[16]["scaleX"]), (1, 1))
+        self.assertLess(keys[13]["scaleX"], .1)
+
+    def test_simultaneous_labels_get_separate_tracks(self):
+        self.scene["episode"]["template"] = "who-is-the-spy"
+        self.scene["characters"]["d"] = self.scene["characters"]["c"]
+        shot = self.scene["shots"][0]
+        shot["characters"] = [{"id": "c", "x": .2, "label": {"text": "西瓜"}},
+                              {"id": "d", "x": .8, "label": {"text": "南瓜"}}]
+        shot["voteTags"] = [{"speaker": "c", "text": "甲"}, {"speaker": "d", "text": "乙"}]
+        tracks = self.build()["timelineWidget"]["timeline"]["captionTracks"]
+        texts = [[c["captionText"] for c in t["captions"]] for t in tracks]
+        self.assertEqual(texts[1:], [["西瓜"], ["南瓜"], ["甲"], ["乙"]])
 
     def test_effect_sounds_match_intro_visibility_and_clip_boundaries(self):
         self.scene["intro"] = {"durationInFrames": 20}
@@ -254,8 +315,8 @@ class BcutTests(unittest.TestCase):
         data = json.loads(next(first.glob("*.bjson")).read_text())
         self.assertNotIn("__BA_ASSETS__", json.dumps(data))
         caption = data["timelineWidget"]["timeline"]["captionTracks"][0]["captions"][0]
-        self.assertEqual(caption["defaultFontPath"], "")
-        self.assertEqual(caption["assetInfo"]["fontSrcPath"], "")
+        self.assertEqual(Path(caption["defaultFontPath"]).resolve(), self.font.resolve())
+        self.assertEqual(Path(caption["assetInfo"]["fontSrcPath"]).resolve(), self.font.resolve())
         for tr in data["timelineWidget"]["timeline"]["videoTracks"]:
             for clip in tr["clips"]:
                 self.assertTrue(Path(clip["sourcePath"]).is_file())

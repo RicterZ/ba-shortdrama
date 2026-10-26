@@ -1,5 +1,18 @@
 {
   "1979b155fd32b5cd98e86078040209b6895a6919d3a9b0da8b8f83c6584d0d32": {
+    "default": true,
+    "bounds": {
+      "x": -530.000244140625,
+      "y": -1025.0,
+      "width": 1050.0,
+      "height": 2453.0,
+      "imageWidth": 822,
+      "imageHeight": 1920,
+      "face": {
+        "x": -28.0,
+        "y": 1056.5
+      }
+    },
     "character": "hayase-yuuka/default",
     "reference": "Multica STUD-23 attachment 01a16bdf-779e-7bd9-8963-78292ce1b1ad",
     "method": "173 SIFT inliers: sprite->reference scale 1.08174715, translation (1542.61420,66.47091); balloon alpha-edge match (1647,260), scale 0.760, source 255x198. Coordinates normalized to uncropped 822x1920 PNG.",

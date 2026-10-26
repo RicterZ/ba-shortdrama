@@ -388,7 +388,9 @@ const CharacterFigure: React.FC<{
   heldEmotion?: string;
   shadowColor: string;
   shotDuration: number;
-}> = ({ entry, data, activeLine, heldEmotion, shadowColor, shotDuration }) => {
+  /** Bcut bubble layer: keep the sprite's geometry but draw only its bubbles. */
+  bubblesOnly?: boolean;
+}> = ({ entry, data, activeLine, heldEmotion, shadowColor, shotDuration, bubblesOnly }) => {
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
   const action = sampleActions(entry.actions, frame, fps);
@@ -497,7 +499,7 @@ const CharacterFigure: React.FC<{
           transform: 'translateX(-50%)',
           borderRadius: '50%',
           background: shadowColor,
-          opacity: (1 - lift * 5) * action.opacity,
+          opacity: bubblesOnly ? 0 : (1 - lift * 5) * action.opacity,
           filter: 'blur(14px)',
         }}
       />
@@ -513,7 +515,7 @@ const CharacterFigure: React.FC<{
           opacity: (entry.entrance === 'fade-in' ? entrance : 1) * action.opacity,
         }}
       >
-        <Img key={sprite} onImageFrame={waitForSpritePaint} src={staticFile(sprite)} style={{height: '100%', width: 'auto', display: 'block', filter: isDimmed
+        <Img key={sprite} onImageFrame={waitForSpritePaint} src={staticFile(sprite)} style={{height: '100%', width: 'auto', display: 'block', visibility: bubblesOnly ? 'hidden' : undefined, filter: isDimmed
           ? 'brightness(0.66) saturate(0.82) drop-shadow(0 10px 22px rgba(20,30,45,0.20))'
           : 'drop-shadow(0 16px 30px rgba(20,30,45,0.22))'}} />
       {(entry.bubbles ?? []).map((cue, index) => {
@@ -801,12 +803,12 @@ const DialogueBox: React.FC<{
   prompt?: boolean;
   lineFrame: number;
   hideText?: boolean;
-}> = ({ speaker, text, character, prompt, lineFrame, hideText }) => {
+  hideCursor?: boolean;
+}> = ({ speaker, text, character, prompt, lineFrame, hideText, hideCursor }) => {
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
   const appear = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 10 });
   const textOpacity = interpolate(frame, [0, 6], [0, 1], clamp);
-  const blink = 0.4 + 0.6 * Math.abs(Math.sin(frame / 10));
   const glyphs = Array.from(text);
   const framesPerGlyph = fps / TYPEWRITER_CHARS_PER_SECOND;
   const visibleGlyphs = Math.min(
@@ -907,23 +909,30 @@ const DialogueBox: React.FC<{
       </div>
 
       {/* 右下闪烁的青色三角：台词打完才出现，提示可以继续 */}
-      {prompt || typing ? null : (
-        <div
-          style={{
-            position: 'absolute',
-            right: '9.6%',
-            bottom: height * 0.07,
-            width: 0,
-            height: 0,
-            borderLeft: `${height * 0.013}px solid transparent`,
-            borderRight: `${height * 0.013}px solid transparent`,
-            borderTop: `${height * 0.017}px solid #6fe3ff`,
-            opacity: blink,
-            filter: 'drop-shadow(0 0 10px rgba(99,217,255,0.9))',
-          }}
-        />
-      )}
+      {prompt || typing || hideCursor ? null : <NextCursor />}
     </AbsoluteFill>
+  );
+};
+
+const NextCursor: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { height } = useVideoConfig();
+  const blink = 0.4 + 0.6 * Math.abs(Math.sin(frame / 10));
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        right: '9.6%',
+        bottom: height * 0.07,
+        width: 0,
+        height: 0,
+        borderLeft: `${height * 0.013}px solid transparent`,
+        borderRight: `${height * 0.013}px solid transparent`,
+        borderTop: `${height * 0.017}px solid #6fe3ff`,
+        opacity: blink,
+        filter: 'drop-shadow(0 0 10px rgba(99,217,255,0.9))',
+      }}
+    />
   );
 };
 
@@ -1231,9 +1240,10 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
             background: `radial-gradient(circle at ${speakingX * 100}% 46%, rgba(255,255,255,0.16), rgba(255,255,255,0) 52%)`,
           }}
         /> : null}
-        {shot.characters.map((entry, slot) => visible(`character-slot:${slot}`) || layer === `character:${entry.id}` ? (
+        {shot.characters.map((entry, slot) => visible(`character-slot:${slot}`) || layer === `character:${entry.id}` || layer === `bubble:${entry.id}` ? (
           <CharacterFigure
             key={`${shot.id}-${entry.id}`}
+            bubblesOnly={layer === `bubble:${entry.id}`}
             entry={entry}
             data={scene.characters[entry.id]}
             activeLine={activeLine}
@@ -1278,6 +1288,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
           ) : null}
         </>
       ) : null}
+      {layer === 'cursor' ? <NextCursor /> : null}
     </AbsoluteFill>
   );
 };

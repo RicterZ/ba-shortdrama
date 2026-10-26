@@ -65,6 +65,7 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
                         videoFps={"num": fps, "den": 1})
     tl["videoTracks"] = []
     registered = set()
+    caption_lanes = {}
     if visual_layers:
         warnings = [
             "画面由制作模板逐帧分层渲染，保留动画、气泡、界面与字幕。背景、角色层和界面可以独立移动、裁剪。",
@@ -74,9 +75,9 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
         ]
     else:
         warnings = [
-            "必剪 3.10.3 明文草稿。本机没有安装必剪，还没有在应用里打开验证。",
-            "可编辑的静态分层，不是成片逐帧复刻：没有镜头运动、转场叠化、入场、走位、转身、气泡和界面按钮。片头只导出标题。",
-            "立绘按分镜位置烘焙成透明底全画布图。说话时用该句表情，说完回到镜头常驻脸；holdEmotion 和 emotionCues 会保留。",
+            "背景和立绘是图片素材，文字是必剪原生字幕；淡入、滑入、走位、跳跃和缩放写成必剪关键帧。",
+            "片头标题卡、对话框底板和界面按钮是模板渲染的图片；转身和动作预设写成关键帧；气泡、选项和按钮按下动画是透明 MOV，▼ 提示是循环 MOV。没有转场叠化。",
+            "立绘按分镜位置做成透明底全画布图。说话时用该句表情，说完回到镜头常驻脸；他人说话时压暗。",
             *getattr(processor, "EXPORT_WARNINGS", ()),
         ]
 
@@ -107,15 +108,29 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
             tl[key].append(item)
         return tl[key][index][clips]
 
-    def image(name, start, end, index, label=None):
+    def image(name, start, end, index, label=None, keyframes=()):
         if end <= start:
             return
         clip = template("image_clip")
-        if visual_layers:
-            # Legacy Windows crop effects without crop geometry become 0x0 crops
-            # in macOS Bcut, producing infinities and a completely black preview.
-            clip["fxs"] = [fx for fx in clip["fxs"] if fx.get("businessType") != 2]
-            clip["propertyFxList"] = []
+        # Legacy Windows crop effects without crop geometry become 0x0 crops
+        # in macOS Bcut, producing infinities and a completely black preview.
+        clip["fxs"] = [fx for fx in clip["fxs"] if fx.get("businessType") != 2]
+        clip["propertyFxList"] = []
+        if keyframes:
+            transform = next(fx for fx in clip["fxs"]
+                             if fx["fxName"] == "Transform 2D" and fx["businessType"] == 1)
+            rotates = any(key.get("rotation") for key in keyframes)
+            transform["keyFrameInfos"] = [
+                item for key in keyframes for item in (
+                    {"paramID": "Trans X", "timePosition": ms(key["frame"]) - start,
+                     "transX": key["transX"], "transY": key["transY"]},
+                    {"paramID": "Scale X", "timePosition": ms(key["frame"]) - start,
+                     "scaleX": key.get("scaleX", key["scale"]), "scaleY": key["scale"]},
+                    {"paramID": "Opacity", "timePosition": ms(key["frame"]) - start,
+                     "opacity": key["opacity"]},
+                    *([{"paramID": "Rotation", "timePosition": ms(key["frame"]) - start,
+                        "rotation": key.get("rotation", 0)}] if rotates else []))]
+            draft["timelineWidget"]["tracking"]["tracks"]["KeyFrame"] = True
         path = TOKEN + name
         label = label or name
         clip.update(inPoint=start, outPoint=end, trimIn=0, trimOut=end-start,
@@ -146,17 +161,13 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
             return
         clip = template("caption")
         clip.update(captionText=text, inPoint=start, outPoint=end)
-        if not visual_layers:
-            for key in ("defaultFontPath", "fontPackagePath"):
-                clip[key] = ""
-            clip["assetInfo"]["fontSrcPath"] = ""
         if x is not None:
             clip["transX"] = x
         if y is not None:
             clip["transY"] = y
         if scale is not None:
+            # Bcut scales the outline with the clip; outlineWidth stays in text units.
             clip["scaleX"] = clip["scaleY"] = scale
-            clip["outlineWidth"] = 12.5 * scale / 0.56
         if color is not None:
             clip["textColor"] = hex_rgb(color)
         if outline is not None:
@@ -164,7 +175,15 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
         if rotation is not None:
             clip["rotation"] = rotation
         clip["assetInfo"].update(content=text, displayName=text, duration=end-start)
-        track("caption", index).append(clip)
+        # A Bcut track shows one clip at a time; simultaneous text gets its own lane.
+        lanes = caption_lanes.setdefault(index, [])
+        lane = next((lane for lane in lanes if all(
+            end <= other["inPoint"] or start >= other["outPoint"] for other in lane)), None)
+        if lane is None:
+            lane = []
+            lanes.append(lane)
+        lane.append(clip)
+        return clip
 
     def audio(relative, start, end, index, volume=1, loop=False, fade_in=0, fade_out=0, trim_in=0):
         if not math.isfinite(volume) or volume < 0:
@@ -242,7 +261,48 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
             placed = [(span, int(span["layer"])) for span in spans]
         for span, index in placed:
             image(span["name"], ms(span["startFrame"]), ms(span["endFrame"]),
-                  index, span["label"])
+                  index, span["label"], span.get("keyframes", ()))
+        stills = processor.stills(scene) if hasattr(processor, "stills") else []
+        if stills:
+            from render_bcut_layers import render_layers
+            from compact_bcut_layers import compact_layers, encode
+            jobs = []
+            for s in stills:
+                if "frame" in s:
+                    jobs.append({"layer": s["layer"], "start": s["frame"], "end": s["frame"] + 1})
+                elif "loop" in s:
+                    jobs.append({"layer": s["layer"], "start": 0, "end": s["loop"]})
+                else:
+                    jobs += [{"layer": s["layer"], "start": a, "end": b} for a, b in s["spans"]]
+            rendered = render_layers(scene, raws, assets, jobs=jobs)
+            top = max((index for _, index in placed), default=0) + 1
+            for offset, layer in enumerate(dict.fromkeys(s["layer"] for s in stills)):
+                index = top + offset
+                own = sorted((span for span in rendered if span["layer"] == layer),
+                             key=lambda span: span["startFrame"])
+                for still in (s for s in stills if s["layer"] == layer):
+                    if "animated" in still:
+                        for span in compact_layers(own, scene, assets):
+                            image(span["name"], ms(span["startFrame"]), ms(span["endFrame"]),
+                                  index, still["label"])
+                        continue
+                    if "loop" in still:
+                        if not own:
+                            continue
+                        cycle = still["loop"]
+                        name = encode(own, layer, fps, assets)["name"]
+                        for a, b in still["spans"]:
+                            for c in range(a, b, cycle):
+                                image(name, ms(c), ms(min(b, c + cycle)), index, still["label"])
+                        continue
+                    name = next((span["name"] for span in own
+                                 if span["startFrame"] <= still["frame"] < span["endFrame"]), None)
+                    if not name:
+                        continue
+                    for a, b in still["spans"]:
+                        keys = [{"frame": f, "transX": 0, "transY": 0, "scale": 1, "opacity": o}
+                                for f, o in still.get("fade", ()) if a <= f <= b]
+                        image(name, ms(a), ms(b), index, still["label"], keys)
         if spans:
             with Image.open(assets / spans[0]["name"]) as cover_image:
                 cover_image.convert("RGB").save(output / "cover.jpg", quality=85)
@@ -264,21 +324,23 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
             continue
         scale = (round(0.56 * element.font_size / height / .042, 4)
                  if element.font_size is not None else None)
-        caption(element.text, ms(element.start), ms(element.end), element.track,
+        clip = caption(element.text, ms(element.start), ms(element.end), element.track,
                 x=round(2 * element.center_x / width - 1, 4) if element.center_x is not None else None,
                 y=round(1 - 2 * element.center_y / height, 4) if element.center_y is not None else None,
                 scale=scale, color=element.color, outline=element.outline, rotation=element.rotation)
-        clip = tl["captionTracks"][element.track]["captions"][-1]
         if element.alignment is not None:
             clip["textAlignment"] = element.alignment
         if element.draw_outline is not None:
             clip["drawOutline"] = element.draw_outline
+    for index in sorted(caption_lanes):
+        for lane in caption_lanes[index]:
+            track("caption", len(tl["captionTracks"])).extend(lane)
     for key, clip_key in (("videoTracks", "clips"), ("audioTracks", "audioClips"), ("captionTracks", "captions")):
         kept = [item for item in tl[key] if item[clip_key]]
         for index, item in enumerate(kept):
             # Video and caption tracks share the visual stacking index. Giving
             # both index 0 places the subtitles underneath opaque backgrounds.
-            item["index"] = index + (len(tl["videoTracks"]) if key == "captionTracks" and visual_layers else 0)
+            item["index"] = index + (len(tl["videoTracks"]) if key == "captionTracks" else 0)
         tl[key] = kept
         for item in tl[key]:
             item[clip_key].sort(key=lambda clip: (clip["inPoint"], clip["outPoint"]))
@@ -304,13 +366,12 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
         pic_count=clip_count if not visual_layers else sum(
             c.get("mediaType") == 1 for t in tl["videoTracks"] for c in t["clips"]),
         subtitles=";".join(c["uid"] for t in tl["captionTracks"] for c in t["captions"]))
-    if visual_layers:
-        used = {clip["sourcePath"].removeprefix(TOKEN)
-                for key, clips in (("videoTracks", "clips"), ("audioTracks", "audioClips"))
-                for tr in tl[key] for clip in tr[clips]}
-        for path in assets.iterdir():
-            if path.name not in used:
-                path.unlink()
+    used = {clip["sourcePath"].removeprefix(TOKEN)
+            for key, clips in (("videoTracks", "clips"), ("audioTracks", "audioClips"))
+            for tr in tl[key] for clip in tr[clips]}
+    for path in assets.iterdir():
+        if path.is_file() and path.name not in used:
+            path.unlink()
     lib.write_json(output / "draft.bjson", draft)
     manifest = {"name": ep["title"], "duration_ms": end_ms, "warnings": warnings, "format": "ba-bcut-1"}
     if visual_layers:
@@ -323,7 +384,11 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--episode", required=True)
-    parser.add_argument("--captions", choices=("rendered", "editable"), default="rendered")
+    parser.add_argument("--mode", choices=("keyframes", "rendered"), default="keyframes",
+                        help="keyframes: still images, native captions and Bcut keyframes; "
+                             "rendered: frame-by-frame template layers")
+    parser.add_argument("--captions", choices=("rendered", "editable"), default="rendered",
+                        help="only for --mode rendered")
     args = parser.parse_args()
     episode = lib.resolve_episode(args.episode, lock=True)
     destination = episode / "output" / f"bcut-{uuid.uuid4().hex[:8]}"
@@ -331,7 +396,7 @@ def main():
     tmp = Path(tempfile.mkdtemp(dir=destination.parent))
     try:
         build(lib.load_json(episode / "project/scene.json"), episode / "raws", tmp,
-              visual_layers=True, editable_captions=args.captions == "editable")
+              visual_layers=args.mode == "rendered", editable_captions=args.captions == "editable")
         tmp.rename(destination)
     except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)

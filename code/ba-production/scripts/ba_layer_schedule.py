@@ -118,6 +118,33 @@ def layer_frame_ranges(scene, layers, transitions=(), *, spy=False):
     return result
 
 
+def spy_character_key(scene, shot, slot, frame):
+    """Every input ShotView passes to a spy character slot, after the 16-frame entrance."""
+    lines = shot.get("lines", [])
+    active = next((line for line in lines if line["from"] <= frame < line["from"] + line["durationInFrames"]), None)
+    display = active or next((line for line in reversed(lines) if frame >= line["from"]), lines[0] if lines else None)
+    thought = bool(display) and display.get("kind") == "thought"
+    entries = shot.get("characters", [])
+    focus = next((e for e in entries if e["id"] == shot.get("focus")), None) if thought or not lines else None
+    ordered = [e for e in entries if e is not focus] + [focus] if focus else entries
+    if slot >= len(ordered):
+        return None
+    entry = ordered[slot]
+    if any(entry.get(key) for key in ("actions", "bubbles", "motion", "turns")):
+        return None
+    held = next((line.get("emotion") for line in reversed(lines)
+                 if line["speaker"] == entry["id"] and frame >= line["from"]), None) if entry.get("holdEmotion") else None
+    cued = None
+    for cue in entry.get("emotionCues") or []:
+        if frame >= shot["from"] + cue.get("startFrame", 0):
+            cued = cue.get("emotion")
+    state = {"entry": entry, "data": scene["characters"].get(entry["id"]),
+             "active": active and {k: active.get(k) for k in ("speaker", "emotion", "kind")},
+             "highlighted": None if thought else (display or {}).get("speaker"),
+             "held": held, "cued": cued, "focus": focus is entry, "dimmed": bool(focus) and focus is not entry}
+    return "spy-character:" + json.dumps(state, sort_keys=True)
+
+
 def render_jobs(scene, layers, transitions=(), *, spy=False):
     """Render every dynamic frame; reuse only analytically constant component states.
 
@@ -140,7 +167,7 @@ def render_jobs(scene, layers, transitions=(), *, spy=False):
                 boundaries.add(shot["from"] + cue.get("startFrame", 0))
     for layer in layers:
         for start, end in ranges[layer]:
-            static_candidate = layer in {"background", "ui", "chrome"} or (not spy and layer.startswith("character"))
+            static_candidate = layer in {"background", "ui", "chrome"} or layer.startswith("character")
             points = sorted({start, end, *[f for f in boundaries if start < f < end]}) if static_candidate else [start, end]
             for a, b in zip(points, points[1:]):
                 job = {"layer": layer, "start": a, "end": b}
@@ -163,6 +190,10 @@ def render_jobs(scene, layers, transitions=(), *, spy=False):
                         job["staticKey"] = "background:" + json.dumps(state, sort_keys=True)
                     elif layer == "chrome" or (layer == "ui" and not shot.get("buttons") and not (shot.get("choices") or {}).get("options")):
                         job["staticKey"] = "story-chrome"
+                    elif spy and layer.startswith("character-slot:") and a >= shot["from"] + 30:
+                        key = spy_character_key(scene, shot, int(layer.split(":", 1)[1]), a)
+                        if key:
+                            job["staticKey"] = key
                     elif not spy and layer.startswith("character") and a >= shot["from"] + 30:
                         entries = shot.get("characters", [])
                         if layer.startswith("character-slot:"):

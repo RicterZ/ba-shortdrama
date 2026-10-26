@@ -369,9 +369,11 @@ python install_bcut.py --bcut-closed
 
 Windows 默认写入 `~/Documents/Bcut Drafts`，macOS 默认写入 `~/Movies/Bcut Drafts`。必剪偏好设置里的草稿目录若不是这个，加上 `--draft-root`。安装只新建一个草稿，并给原来的 `draftInfo.json` 留一份备份。原生字幕字体在接收电脑上解析，自动找不到时用 `--font-path` 指向已安装的中文 TTF 字体。
 
-草稿按必剪 3.10.3 的明文 JSON 写成，字段结构来自 MIT 项目 dsh-bcut-edit，见 `THIRD_PARTY_NOTICES.md`。`ep:bcut` 用制作模板把背景、角色、对话框、界面和字幕渲成透明 PNG 或无损透明 MOV。主视频轨是铺满全片的黑画布，上面才是这些图层，避免必剪收紧空隙时把背景提前换掉。图层顺序和哪些帧可以复用由各模板的 `bcut.py` 决定，现有两个模板与连续画布那版导出一致。新模板自带处理器即可，不用改导出器。
+草稿按必剪 3.10.3 的明文 JSON 写成，字段结构来自 MIT 项目 dsh-bcut-edit，见 `THIRD_PARTY_NOTICES.md`。`ep:bcut` 默认是关键帧模式：背景和立绘是图片，台词、词牌、投票字是必剪原生字幕，排在所有画面轨之上；同时出现的文字各占一条字幕轨。进场、走位、跳跃、缩放、动作预设和转身写成必剪关键帧，动作预设来自 `templates/character-action-keyframes.json`（由 `scripts/freeze_action_keyframes.mjs` 从 `character-actions.mjs` 生成，改了动作要重新生成）。片头标题卡、每位说话人的对话框底板和界面按钮由模板渲成图片；气泡、选项和按钮按下动画是透明 MOV，▼ 提示是一段循环 MOV。转场叠化还没有做。
 
-配音、点击音、系统语音、界面音效和 BGM 是必剪音频轨。BGM 静音结束后从曲目里对应的位置继续。谁是卧底的系统语音覆盖该镜头全长。默认字幕在画面层里，字形和打字效果跟成片一致；要改字时执行 `uv run python scripts/export_bcut.py --episode <id> --captions editable`，正文变成原生字幕，复杂描边和逐字出现不会保留。
+配音、点击音、系统语音、界面音效和 BGM 是必剪音频轨。BGM 静音结束后从曲目里对应的位置继续。谁是卧底的系统语音覆盖该镜头全长。旧的逐帧分层导出仍可用 `uv run python scripts/export_bcut.py --episode <id> --mode rendered` 生成，见 `docs/bcut-layers.md`。
+
+气泡位置以优香的校准为基准，随角色脸部中心平移。`prepare` 用 `scripts/spine_face.mjs`（官方 Spine 运行时）从立绘骨骼的闭眼图层读出脸部中心，所以用到气泡的服装必须在 profile 里写 `outfits.spine`；旧剧集要重新 prepare 才会带上脸部数据。
 
 ### 角色内置动作（首批已接入）
 

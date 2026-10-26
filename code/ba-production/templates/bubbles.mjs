@@ -10,9 +10,11 @@ export function bubbleGeometry(preset, spriteHeight, bounds, name) {
     y: calibration.y * spriteHeight,
     width: calibration.width * spriteHeight * bounds.imageWidth / bounds.imageHeight,
   };
+  // faceShift moves the root-relative upstream offset to this character's face.
+  const shift = bounds.faceShift ?? {x: 0, y: 0};
   return {
-    x: ((preset.offset.x - .8) * 540 - bounds.x) * scale,
-    y: ((preset.offset.y - 1.2) * 1012 + bounds.y + bounds.height) * scale,
+    x: ((preset.offset.x - .8) * 540 - bounds.x + shift.x) * scale,
+    y: ((preset.offset.y - 1.2) * 1012 + bounds.y + bounds.height - shift.y) * scale,
     // Dot never calls getRelativeScale: its balloon and children stay native.
     width: (preset.nativeWidth ?? preset.width * 540) * scale,
   };

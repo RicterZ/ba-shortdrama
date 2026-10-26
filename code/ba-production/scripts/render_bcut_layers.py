@@ -22,7 +22,8 @@ from render import BA_PRODUCTION, remotion_env
 from bcut_processor import load_processor
 
 
-def render_layers(scene, raws, output_assets, layers=None, *, editable_captions=False, concurrency=None):
+def render_layers(scene, raws, output_assets, layers=None, *, editable_captions=False,
+                  concurrency=None, jobs=None):
     processor = load_processor(scene)
     if hasattr(processor, "images"):
         from image_layout import render_images
@@ -33,7 +34,8 @@ def render_layers(scene, raws, output_assets, layers=None, *, editable_captions=
         scene = {**scene, "bcutHideDialogueText": True}
     if layers is None:
         layers = processor.layers(scene, editable_captions)
-    transitions = processor.composites(scene) if hasattr(processor, "composites") else []
+    transitions = [] if jobs is not None else (
+        processor.composites(scene) if hasattr(processor, "composites") else [])
     merged = []
     for start, end in sorted(transitions):
         if merged and start <= merged[-1][1]:
@@ -50,7 +52,7 @@ def render_layers(scene, raws, output_assets, layers=None, *, editable_captions=
         request.write_text(json.dumps({"scene": scene, "raws": str(Path(raws).resolve()),
             "assets": str(Path(output_assets).resolve()), "scratch": str(scratch),
             "layers": layers, "transitions": transitions, "result": str(result),
-            "concurrency": concurrency, "jobs": render_jobs(scene, layers, transitions)}, ensure_ascii=False), encoding="utf-8")
+            "concurrency": concurrency, "jobs": jobs if jobs is not None else render_jobs(scene, layers, transitions)}, ensure_ascii=False), encoding="utf-8")
         subprocess.run([os.environ.get("NODE") or "node",
             str(Path(__file__).with_suffix(".mjs")), str(request)],
             cwd=BA_PRODUCTION, env=remotion_env(), check=True)

@@ -1067,7 +1067,7 @@ const Intro: React.FC<{ intro: NonNullable<Scene['intro']>; scene: Scene }> = ({
   const bandHeight = height * 0.24;
 
   return (
-    <AbsoluteFill style={{ opacity: fadeOut, overflow: 'hidden', background: '#071019' }}>
+    <AbsoluteFill style={{ opacity: fadeOut, overflow: 'hidden', background: '#071019', zIndex: 50 }}>
       {firstShot ? (
         <AbsoluteFill style={{ opacity: 0.38, filter: 'blur(3px) brightness(0.72)' }}>
           <SceneBackdrop shot={firstShot} />

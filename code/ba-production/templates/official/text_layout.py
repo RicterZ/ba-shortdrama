@@ -10,17 +10,12 @@ def layout(scene, *, visual_layers=False, editable_captions=False):
         return
     for shot in scene["shots"]:
         for line in shot.get("lines", []):
-            start = max(line["from"], intro_end) if visual_layers else line["from"]
-            end = line["from"] + line["durationInFrames"]
-            if visual_layers:
-                end = min(end, shot["from"] + shot["durationInFrames"])
+            start = max(line["from"], intro_end)
+            end = min(line["from"] + line["durationInFrames"], shot["from"] + shot["durationInFrames"])
             if line["text"] and end > start:
-                yield (dialogue(scene, line["text"], start, end) if visual_layers else
-                       TextElement(line["text"], start, end))
+                yield dialogue(scene, line["text"], start, end)
         prompt = (shot.get("choices") or {}).get("prompt")
-        if visual_layers and prompt:
+        if prompt:
             for a, b in prompt_gaps(shot, intro_end):
                 if b > a:
                     yield dialogue(scene, prompt, a, b)
-    if not visual_layers and intro.get("title") and intro_end > 0:
-        yield TextElement(intro["title"], 0, intro_end)

@@ -3,6 +3,7 @@ import hashlib
 import json
 import math
 import struct
+import subprocess
 from pathlib import Path
 from PIL import Image
 
@@ -97,4 +98,36 @@ def read_coordinates(skeleton: Path, sprite: Path) -> dict:
     calibrations = json.loads((Path(__file__).resolve().parents[1] / "templates" / "bubble-calibrations.json").read_text())
     if result["sha256"] in calibrations:
         result["bubbleAnchors"] = calibrations[result["sha256"]]["anchors"]
+    else:
+        # Bubbles keep the default character's offset from the face centre.
+        default = next(entry for entry in calibrations.values() if entry.get("default"))
+        result["face"] = face_centre(skeleton)
+        source = default["bounds"]["face"]
+        # Upstream offsets are fixed from the skeleton root; move them with the face.
+        result["faceShift"] = {"x": result["face"]["x"] - source["x"], "y": result["face"]["y"] - source["y"]}
+        # Only Dot is measured from the game; the other default anchors are provisional.
+        result["bubbleAnchors"] = transfer_anchors({"Dot": default["anchors"]["Dot"]}, default["bounds"], result)
     return result
+
+
+def face_centre(skeleton: Path) -> dict:
+    from render import BA_PRODUCTION
+    output = subprocess.run(["node", str(Path(__file__).with_name("spine_face.mjs")), str(skeleton)],
+                            cwd=BA_PRODUCTION, check=True, capture_output=True, text=True).stdout
+    return json.loads(output)
+
+
+def transfer_anchors(anchors, source, target):
+    """Re-express anchors (fractions of one uncropped PNG) on another skeleton's PNG,
+    moving them with the face centre in skeleton units."""
+    dx, dy = target["face"]["x"] - source["face"]["x"], target["face"]["y"] - source["face"]["y"]
+    moved = {}
+    for name, anchor in anchors.items():
+        spine_x = source["x"] + anchor["x"] * source["width"] + dx
+        spine_top = source["y"] + source["height"] - anchor["y"] * source["height"] + dy
+        spine_width = anchor["width"] * source["width"]
+        moved[name] = {**anchor,
+                       "x": (spine_x - target["x"]) / target["width"],
+                       "y": (target["y"] + target["height"] - spine_top) / target["height"],
+                       "width": spine_width / target["width"]}
+    return moved
