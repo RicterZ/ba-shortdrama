@@ -11,6 +11,7 @@ from PIL import Image
 
 import export_bcut
 import install_bcut
+import text_layout
 from render_bcut_layers import effect_audio_events, render_layers, layer_frame_ranges, render_jobs, default_layers
 
 
@@ -54,9 +55,15 @@ class BcutTests(unittest.TestCase):
     def test_layers_timing_and_loop(self):
         draft = self.build()
         tl = draft["timelineWidget"]["timeline"]
-        self.assertEqual(len(tl["videoTracks"]), 2)
+        self.assertEqual([tr["clips"][0]["assetInfo"]["displayName"].split()[0] for tr in tl["videoTracks"][2:]],
+                         ["对话框", "▼", "界面按钮"])
+        cursor = tl["videoTracks"][3]["clips"]
+        self.assertTrue(cursor and all(c["sourcePath"].endswith(".mov") for c in cursor))
         pose = tl["videoTracks"][1]["clips"]
         self.assertEqual([(c["inPoint"], c["outPoint"]) for c in pose], [(0, 3000)])
+        box = tl["videoTracks"][2]["clips"]
+        self.assertEqual([(c["inPoint"], c["outPoint"]) for c in box], [(333, tl["captionTracks"][0]["captions"][0]["outPoint"])])
+        self.assertTrue(box[0]["assetInfo"]["displayName"].startswith("对话框"))
         self.assertEqual(tl["captionTracks"][0]["captions"][0]["inPoint"], 333)
         self.assertTrue((self.bundle / "cover.jpg").is_file())
         voice = tl["audioTracks"][0]["audioClips"][0]
@@ -66,24 +73,73 @@ class BcutTests(unittest.TestCase):
                          [(0, 1000), (1000, 2000), (2000, 3000)])
         self.assertAlmostEqual(music[0]["fxs"][0]["gainValue"], -6.0206, places=4)
 
-    def test_image_clips_have_no_undefined_crop(self):
+    def test_image_clips_drop_geometryless_crop(self):
         draft = self.build()
-        tracks = draft["timelineWidget"]["timeline"]["videoTracks"]
-        for track in tracks:
-            for clip in track["clips"]:
-                self.assertFalse(any(fx.get("businessType") == 2 for fx in clip["fxs"]))
-                self.assertEqual(clip["propertyFxList"], [])
+        clips = [clip for track in draft["timelineWidget"]["timeline"]["videoTracks"] for clip in track["clips"]]
+        self.assertFalse(any(fx.get("businessType") == 2 for clip in clips for fx in clip["fxs"]))
 
-    def test_caption_indices_stack_above_every_video_track(self):
+    def test_motion_becomes_transform_keyframes(self):
+        entry = self.scene["shots"][0]["characters"][0]
+        entry.update(x=.25, bottom=0, height=1, motion={"startFrame": 30, "endFrame": 60, "toX": .75, "ease": "linear"})
+        draft = self.build()
+        clip = draft["timelineWidget"]["timeline"]["videoTracks"][1]["clips"][0]
+        keys = next(fx for fx in clip["fxs"] if fx["fxName"] == "Transform 2D" and fx["businessType"] == 1)["keyFrameInfos"]
+        trans = [(k["timePosition"], k["transX"], k["transY"]) for k in keys if k["paramID"] == "Trans X"]
+        self.assertEqual(trans[0], (0, 0, 0))
+        self.assertEqual(trans[-1], (3000, 1.0, 0))
+        self.assertIn((1500, 0.5, 0), trans)
+        self.assertTrue(draft["timelineWidget"]["tracking"]["tracks"]["KeyFrame"])
+
+    def test_fade_in_scales_about_canvas_centre(self):
+        entry = self.scene["shots"][0]["characters"][0]
+        entry.update(x=.75, bottom=0, height=1, entrance="fade-in",
+                     motion={"startFrame": 30, "endFrame": 60, "toScale": 2, "ease": "linear"})
+        clip = self.build()["timelineWidget"]["timeline"]["videoTracks"][1]["clips"][0]
+        keys = next(fx for fx in clip["fxs"] if fx["businessType"] == 1)["keyFrameInfos"]
+        opacity = [(k["timePosition"], k["opacity"]) for k in keys if k["paramID"] == "Opacity"]
+        self.assertEqual((opacity[0], opacity[-1][1]), ((0, 0), 1))
+        last = [k for k in keys if k["timePosition"] == 3000]
+        self.assertEqual({k["paramID"]: k.get("scaleX", k.get("transX")) for k in last if k["paramID"] != "Opacity"},
+                         {"Scale X": 2, "Trans X": -0.5})
+
+    def test_caption_tracks_follow_creation_order(self):
         self.scene["episode"]["template"] = "who-is-the-spy"
         self.scene["shots"][0]["characters"][0]["label"] = {"text": "Word"}
         self.scene["shots"][0]["voteTags"] = [{"speaker": "c", "text": "Vote"}]
         timeline = self.build()["timelineWidget"]["timeline"]
-        video_indices = [track["index"] for track in timeline["videoTracks"]]
-        caption_indices = [track["index"] for track in timeline["captionTracks"]]
-        self.assertEqual(len(set(video_indices + caption_indices)),
-                         len(video_indices) + len(caption_indices))
-        self.assertGreater(min(caption_indices), max(video_indices))
+        self.assertEqual([track["index"] for track in timeline["videoTracks"]], [0, 1])
+        self.assertEqual([track["index"] for track in timeline["captionTracks"]], [2, 3, 4])
+
+    def test_action_presets_keep_their_transform_origin(self):
+        import ba_scene
+        entry = {"id": "c", "x": .3, "bottom": -.2, "height": 1, "actions": [{"name": "closeup", "startFrame": 0}]}
+        shot = {"from": 0, "durationInFrames": 30}
+        key = ba_scene.pose_keyframes(entry, shot, 0, 30, 1280, 720)[-1]
+        self.assertEqual(key["scale"], 1.5)
+        # The sprite's bottom centre stays put when Bcut scales about the canvas centre.
+        foot = (2 * .3 - 1, 1 - 2 * 1.2)
+        self.assertAlmostEqual(key["transX"] + 1.5 * foot[0], foot[0], places=4)
+        self.assertAlmostEqual(key["transY"] + 1.5 * foot[1], foot[1], places=4)
+
+    def test_turn_splits_facing_and_squeezes_scale_x(self):
+        import ba_scene
+        entry = {"id": "c", "x": .5, "turns": [{"to": "left", "startFrame": 10, "durationInFrames": 6}]}
+        shot = {"from": 0, "durationInFrames": 30}
+        self.assertEqual(ba_scene.facing_spans(entry, shot, 0, 30), [(0, 14, "right"), (14, 30, "left")])
+        keys = {k["frame"]: k for k in ba_scene.pose_keyframes(entry, shot, 0, 30, 1280, 720)}
+        self.assertEqual((keys[10]["scaleX"], keys[16]["scaleX"]), (1, 1))
+        self.assertLess(keys[13]["scaleX"], .1)
+
+    def test_simultaneous_labels_get_separate_tracks(self):
+        self.scene["episode"]["template"] = "who-is-the-spy"
+        self.scene["characters"]["d"] = self.scene["characters"]["c"]
+        shot = self.scene["shots"][0]
+        shot["characters"] = [{"id": "c", "x": .2, "label": {"text": "西瓜"}},
+                              {"id": "d", "x": .8, "label": {"text": "南瓜"}}]
+        shot["voteTags"] = [{"speaker": "c", "text": "甲"}, {"speaker": "d", "text": "乙"}]
+        tracks = self.build()["timelineWidget"]["timeline"]["captionTracks"]
+        texts = [[c["captionText"] for c in t["captions"]] for t in tracks]
+        self.assertEqual(texts[1:], [["西瓜"], ["南瓜"], ["甲"], ["乙"]])
 
     def test_effect_sounds_match_intro_visibility_and_clip_boundaries(self):
         self.scene["intro"] = {"durationInFrames": 20}
@@ -110,6 +166,7 @@ class BcutTests(unittest.TestCase):
     def test_editable_spy_omits_rendered_text_layers(self):
         self.scene["episode"]["template"] = "who-is-the-spy"
         layers = default_layers(self.scene, editable_captions=True)
+        self.assertLess(layers.index("dialogue-ba"), layers.index("character-slot:0"))
         self.assertIn("dialogue-ba", layers)
         self.assertIn("buttons", layers)
         self.assertFalse(set(layers) & {"word-labels", "votes", "thought", "meme"})
@@ -121,10 +178,61 @@ class BcutTests(unittest.TestCase):
         self.assertLess(layers.index("buttons"), layers.index("chrome"))
         self.scene["episode"]["template"] = "who-is-the-spy"
         layers = default_layers(self.scene)
+        self.assertLess(layers.index("dialogue-ba"), layers.index("character-slot:0"))
         self.assertLess(layers.index("word-labels"), layers.index("choices"))
         self.assertLess(layers.index("votes"), layers.index("buttons"))
         self.assertLess(layers.index("buttons"), layers.index("thought"))
         self.assertLess(layers.index("meme"), layers.index("chrome"))
+
+    def test_template_pixel_layout_maps_to_native_text(self):
+        element = text_layout.TextElement("Custom layout", 15, 45,
+            center_x=50, center_y=25, font_size=8.4, track=2,
+            color="#ff0000", alignment=0, draw_outline=False)
+        with patch("text_layout.text_elements", return_value=[element]):
+            export_bcut.build(self.scene, self.raws, self.bundle)
+        draft = json.loads((self.bundle / "draft.bjson").read_text())
+        clip = draft["timelineWidget"]["timeline"]["captionTracks"][0]["captions"][0]
+        self.assertEqual((clip["captionText"], clip["inPoint"], clip["outPoint"]),
+                         ("Custom layout", 500, 1500))
+        self.assertEqual((clip["transX"], clip["transY"], clip["scaleX"]), (-.5, .5, 1.12))
+        self.assertEqual(clip["textColor"], {"r": 1, "g": 0, "b": 0, "a": 1})
+        self.assertFalse(clip["drawOutline"])
+        self.assertEqual(clip["textAlignment"], 0)
+
+    def test_new_template_text_processor_needs_no_registry_entry(self):
+        scripts = self.root / "scripts"
+        scripts.mkdir()
+        processor = self.root / "templates" / "third-template"
+        processor.mkdir(parents=True)
+        (processor / "text_layout.py").write_text(
+            'from text_layout import TextElement\n'
+            'def layout(scene, **kwargs):\n'
+            '    yield TextElement("Third", 0, 10, center_x=12, font_size=8)\n')
+        self.scene["episode"]["template"] = "third-template"
+        with patch("bcut_processor.__file__", str(scripts / "bcut_processor.py")):
+            elements = text_layout.text_elements(self.scene)
+        self.assertEqual(elements[0].text, "Third")
+        self.assertEqual(elements[0].center_x, 12)
+
+    def test_invalid_template_text_fails_before_draft_is_written(self):
+        for values in ({"font_size": 0}, {"center_x": float("nan")},
+                       {"rotation": float("inf")}, {"start": -1}, {"end": 0}):
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                text_layout.TextElement(**{"text": "X", "start": 0, "end": 10, **values}).validate()
+        self.scene["episode"]["template"] = "../official"
+        with self.assertRaises(ValueError):
+            text_layout.text_elements(self.scene)
+
+    def test_official_processor_owns_dialogue_layout_and_prompt_gaps(self):
+        self.scene["intro"] = {"durationInFrames": 20}
+        self.scene["shots"][0]["choices"] = {"prompt": "Pick one"}
+        elements = text_layout.text_elements(self.scene, visual_layers=True, editable_captions=True)
+        self.assertEqual([(e.text, e.start, e.end) for e in elements],
+                         [("Hello", 20, 50), ("Pick one", 50, 90)])
+        self.assertAlmostEqual(elements[0].center_y, 100 * (.76 + .038 * 1.12 / 2))
+        self.assertAlmostEqual(elements[0].font_size, 3.192)
+        self.assertFalse(elements[0].draw_outline)
+        self.assertEqual(text_layout.text_elements(self.scene, visual_layers=True), [])
 
     def test_main_track_cannot_ripple_intro_and_transition_gaps(self):
         def rendered(scene, raws, assets, **kwargs):
@@ -206,10 +314,9 @@ class BcutTests(unittest.TestCase):
         self.assertIn(original, [p.read_bytes() for p in root.glob("*.bak")])
         data = json.loads(next(first.glob("*.bjson")).read_text())
         self.assertNotIn("__BA_ASSETS__", json.dumps(data))
-        self.assertNotIn("__BCUT_FONT__", json.dumps(data))
         caption = data["timelineWidget"]["timeline"]["captionTracks"][0]["captions"][0]
-        self.assertEqual(caption["defaultFontPath"], self.font.resolve().as_posix())
-        self.assertEqual(caption["assetInfo"]["fontSrcPath"], self.font.resolve().as_posix())
+        self.assertEqual(Path(caption["defaultFontPath"]).resolve(), self.font.resolve())
+        self.assertEqual(Path(caption["assetInfo"]["fontSrcPath"]).resolve(), self.font.resolve())
         for tr in data["timelineWidget"]["timeline"]["videoTracks"]:
             for clip in tr["clips"]:
                 self.assertTrue(Path(clip["sourcePath"]).is_file())
@@ -251,9 +358,8 @@ class BcutTests(unittest.TestCase):
         clips = draft["timelineWidget"]["timeline"]["videoTracks"][1]["clips"]
         self.assertEqual(
             [(c["inPoint"], c["outPoint"], c["assetInfo"]["displayName"]) for c in clips],
-            [(0, 333, "c default"), (333, 666, "c happy"), (666, 3000, "c shy")])
-        # At the exact first frame of the new expression, only it is active.
-        at = 20 * 1000 / 30
+            [(0, 333, "c default"), (333, 667, "c happy"), (667, 3000, "c shy")])
+        at = 667
         active = [c for c in clips if c["inPoint"] <= at < c["outPoint"]]
         self.assertEqual([c["assetInfo"]["displayName"] for c in active], ["c shy"])
         for clip in clips:
@@ -287,7 +393,7 @@ class BcutTests(unittest.TestCase):
     def test_reject_unsafe_asset_and_unsupported_template(self):
         bad = copy.deepcopy(self.scene)
         bad["episode"]["template"] = "blue-archive"
-        with self.assertRaisesRegex(ValueError, "official"):
+        with self.assertRaisesRegex(ValueError, "processor"):
             export_bcut.build(bad, self.raws, self.bundle)
         bad = copy.deepcopy(self.scene)
         bad["shots"][0]["scene"]["image"] = "../outside.png"
@@ -327,7 +433,7 @@ class BcutTests(unittest.TestCase):
         self.assertEqual([(c["inPoint"], c["outPoint"]) for c in tl["audioTracks"][3]["audioClips"]],
                          [(1000, 2000)])
 
-    def test_music_continues_source_after_mute(self):
+    def test_music_continues_from_the_timeline_after_a_mute(self):
         with wave.open(str(self.raws / "music.wav"), "wb") as audio:
             audio.setparams((1, 2, 48000, 0, "NONE", "not compressed"))
             audio.writeframes(b"\0\0" * 48000 * 4)

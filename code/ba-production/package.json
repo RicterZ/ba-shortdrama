@@ -5,7 +5,7 @@
     "ep:new": "uv run python scripts/new_episode.py",
     "ep:prepare": "uv run python scripts/prepare.py --episode $EPISODE",
     "ep:bcut": "uv run python scripts/export_bcut.py --episode $EPISODE",
-    "test:bcut": "uv run python scripts/test_bcut.py && uv run python scripts/test_compact_bcut_layers.py",
+    "test:bcut": "uv run python scripts/test_bcut.py && uv run python scripts/test_bcut_contract.py && uv run python scripts/test_compact_bcut_layers.py",
     "ep:validate": "uv run python scripts/validate.py --all",
     "ep:preview": "uv run python scripts/render.py --episode $EPISODE --profile preview --mode video",
     "ep:final": "uv run python scripts/render.py --episode $EPISODE --profile final --mode video",
@@ -22,6 +22,7 @@
     "fx": "uv run python scripts/preview_fx.py"
   },
   "dependencies": {
+    "@esotericsoftware/spine-core": "~4.2",
     "@remotion/cli": "4.0.417",
     "@remotion/transitions": "4.0.417",
     "react": "19.2.3",

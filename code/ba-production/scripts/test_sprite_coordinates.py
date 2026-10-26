@@ -2,12 +2,25 @@ import struct
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from PIL import Image
 from sprite_coordinates import read_coordinates
 
 
 class SpriteCoordinatesTest(unittest.TestCase):
-    def test_native_bounds_not_image_center(self):
+    def test_default_anchors_follow_the_face(self):
+        from sprite_coordinates import transfer_anchors
+        source = {"x": -50, "y": 0, "width": 100, "height": 200, "face": {"x": 0, "y": 150}}
+        target = {"x": -100, "y": 0, "width": 200, "height": 200, "face": {"x": 40, "y": 130}}
+        moved = transfer_anchors({"Dot": {"x": .6, "y": .2, "width": .1, "dotX": .3}}, source, target)["Dot"]
+        spine_x, spine_top = -50 + .6 * 100, 200 - .2 * 200
+        self.assertAlmostEqual(-100 + moved["x"] * 200, spine_x + 40)
+        self.assertAlmostEqual(200 - moved["y"] * 200, spine_top - 20)
+        self.assertAlmostEqual(moved["width"] * 200, 10)
+        self.assertEqual(moved["dotX"], .3)
+
+    @patch("sprite_coordinates.face_centre", return_value={"x": 0, "y": 150})
+    def test_native_bounds_not_image_center(self, _face):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             skeleton, sprite = root / 'test.skel', root / 'test.png'

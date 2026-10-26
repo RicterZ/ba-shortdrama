@@ -68,7 +68,8 @@ class PreviewFxTest(unittest.TestCase):
             root = Path(tmp)
             write_character(root, spine=True)
             raws = root / "raws"
-            with patch.object(lib, "ROOT", root), patch.object(lib, "CHARACTERS", root / "data" / "characters"):
+            with patch.object(lib, "ROOT", root), patch.object(lib, "CHARACTERS", root / "data" / "characters"), \
+                    patch("sprite_coordinates.face_centre", return_value={"x": 0, "y": 150}):
                 scene = preview_fx.build_preview("demo", "Heart", raws, mute=True)
             cue = scene["shots"][0]["characters"][0]["bubbles"][0]
             self.assertEqual(set(cue), {"name", "startFrame", "sound", "images"})
