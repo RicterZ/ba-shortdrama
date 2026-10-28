@@ -45,7 +45,7 @@ def template(name):
     return fresh(value)
 
 
-def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
+def build(scene, raws, output, *, visual_layers=False, editable_captions=False, drop_voice=False):
     ep = scene["episode"]
     processor = load_processor(scene)
     width, height, fps = ep["width"], ep["height"], ep["fps"]
@@ -310,6 +310,10 @@ def build(scene, raws, output, *, visual_layers=False, editable_captions=False):
     for event in processor.audio_events(scene, visual_layers=visual_layers):
         if not isinstance(event, AudioEvent):
             raise ValueError("Processors must return AudioEvent objects")
+        # Track 0 is the dialogue/voice layer. Dropping it leaves the captions
+        # and the rest of the timeline intact for an external voice pass.
+        if drop_voice and event.track == 0:
+            continue
         event.validate(ep["durationInFrames"])
         start_ms = ms(event.start)
         end_point = (min(end_ms, start_ms + ms(event.span_frames))
@@ -389,6 +393,8 @@ def main():
                              "rendered: frame-by-frame template layers")
     parser.add_argument("--captions", choices=("rendered", "editable"), default="rendered",
                         help="only for --mode rendered")
+    parser.add_argument("--drop-voice", action="store_true",
+                        help="skip the dialogue audio track, keeping captions and the timeline")
     args = parser.parse_args()
     episode = lib.resolve_episode(args.episode, lock=True)
     destination = episode / "output" / f"bcut-{uuid.uuid4().hex[:8]}"
@@ -396,7 +402,8 @@ def main():
     tmp = Path(tempfile.mkdtemp(dir=destination.parent))
     try:
         build(lib.load_json(episode / "project/scene.json"), episode / "raws", tmp,
-              visual_layers=args.mode == "rendered", editable_captions=args.captions == "editable")
+              visual_layers=args.mode == "rendered", editable_captions=args.captions == "editable",
+              drop_voice=args.drop_voice)
         tmp.rename(destination)
     except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)

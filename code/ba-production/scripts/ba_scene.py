@@ -295,9 +295,14 @@ def static_spans(scene, assets, copied, *, spy=False):
     for index, shot in enumerate(shots):
         start_frame, end_frame = visible_bounds(shots, index)
         start, end = start_frame, end_frame
-        bg = shot.get("scene", {}).get("image")
+        # image-stage scenes carry a prepared snapshot; plain shots point at a
+        # background image in raws/ directly.
+        bg = (shot.get("scene") or {}).get("image")
+        background = shot.get("background") or {}
+        if not bg and background.get("type") == "image":
+            bg = background.get("path")
         if not bg:
-            raise ValueError(f"Shot {shot['id']} has no snapshot background image")
+            raise ValueError(f"Shot {shot['id']} has no snapshot or background image")
         if bg:
             name = copied(bg)
         else:

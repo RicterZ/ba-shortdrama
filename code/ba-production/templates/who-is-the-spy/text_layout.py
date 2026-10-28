@@ -2,6 +2,40 @@
 from text_layout import TextElement, prompt_gaps
 from ba_text_layout import dialogue
 
+CAPTION_BREAKS = "，。；：！？、）”…"
+
+
+def wrap_caption(text, max_chars, max_lines):
+    """Same break rule as the Remotion caption: balanced, punctuation first."""
+    chars = list(text)
+    if len(chars) <= max_chars:
+        return [text]
+    if max_lines == 2 and len(chars) <= max_chars * 2:
+        ideal = len(chars) / 2
+        best, best_score = max_chars, float("-inf")
+        for cut in range(len(chars) - max_chars, max_chars + 1):
+            score = (4 if chars[cut - 1] in CAPTION_BREAKS else 0) - abs(cut - ideal) / 2
+            if score > best_score:
+                best, best_score = cut, score
+        return ["".join(chars[:best]), "".join(chars[best:])]
+    lines = []
+    start = 0
+    while start < len(chars) and len(lines) < max_lines:
+        if len(chars) - start <= max_chars:
+            lines.append("".join(chars[start:]))
+            start = len(chars)
+            break
+        cut = start + max_chars
+        for i in range(cut, start + max_chars // 2, -1):
+            if chars[i - 1] in CAPTION_BREAKS:
+                cut = i
+                break
+        lines.append("".join(chars[start:cut]))
+        start = cut
+    if start < len(chars):
+        lines[-1] += "".join(chars[start:])
+    return lines
+
 
 def layout(scene, *, visual_layers=False, editable_captions=False):
     if visual_layers and not editable_captions:
@@ -22,8 +56,24 @@ def layout(scene, *, visual_layers=False, editable_captions=False):
 
     def meme_text(text, start, end, speaker=None, thought=False):
         text = text.replace("。", "")
-        size = min(.048 if thought else .098, (.7 if thought else .84) / (max(1, len(text)) * 1.02))
         color = "#ffffff" if thought else scene["characters"].get(speaker, {}).get("color", "#ffffff")
+        # Fixed-size narration captions wrap at the configured width instead of
+        # shrinking to a single line, mirroring MemeCaption in index.tsx.
+        fixed = None if thought else ep.get("style", {}).get("caption_size")
+        if fixed:
+            subtitle = ep.get("subtitle") or {}
+            lines = wrap_caption(text, int(subtitle.get("max_chars_per_line", 26)),
+                                 int(subtitle.get("max_lines", 2)))
+            # Same shrink-to-fit clamp as MemeCaption: a line wider than the
+            # caption box pulls the whole block down a notch.
+            longest = max(len(line) for line in lines)
+            size = min(fixed, width / height * .84 / (longest * 1.02))
+            bottom = .045
+            block = len(lines) * 1.34 * size
+            return TextElement("\n".join(lines), start, end, track=0,
+                center_x=.5 * width, center_y=(1 - bottom) * height - block * height / 2,
+                font_size=size * height, color=color, outline="#ffffff", rotation=0)
+        size = min(.048 if thought else .098, (.7 if thought else .84) / (max(1, len(text)) * 1.02))
         return positioned(text, start, end, size, bottom=.17 if thought else .06,
             color=color, outline="#0b1119" if thought else "#ffffff", rotation=-1 if thought else -1.2)
 
