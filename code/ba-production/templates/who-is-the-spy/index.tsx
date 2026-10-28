@@ -198,7 +198,7 @@ type Scene = {
     height: number;
     fps: number;
     durationInFrames: number;
-    style?: { accent?: string; font_family?: string; caption_style?: 'ba' | 'meme' };
+    style?: { accent?: string; font_family?: string; caption_style?: 'ba' | 'meme'; caption_size?: number };
     subtitle?: { max_chars_per_line?: number; max_lines?: number };
   };
   characters: Record<string, CharacterData>;
@@ -1304,37 +1304,98 @@ const WordLabels: React.FC<{ shot: Shot; height: number }> = ({ shot, height }) 
   );
 };
 
+// Narration captions keep one fixed size across the episode and wrap instead
+// of shrinking to a single line, so long VO lines stay readable on black.
+const CAPTION_BREAKS = new Set(['，', '。', '；', '：', '！', '？', '、', '）', '”', '…']);
+const wrapCaption = (text: string, maxChars: number, maxLines: number): string[] => {
+  const chars = Array.from(text);
+  if (chars.length <= maxChars) return [text];
+  // Two lines cover the narration case: split near the middle, but let
+  // punctuation win when it sits close to it, so clauses stay intact.
+  if (maxLines === 2 && chars.length <= maxChars * 2) {
+    const ideal = chars.length / 2;
+    const lowest = chars.length - maxChars;
+    const highest = maxChars;
+    let best = highest;
+    let bestScore = -Infinity;
+    for (let i = lowest; i <= highest; i += 1) {
+      const score = (CAPTION_BREAKS.has(chars[i - 1]) ? 4 : 0) - Math.abs(i - ideal) / 2;
+      if (score > bestScore) {
+        bestScore = score;
+        best = i;
+      }
+    }
+    return [chars.slice(0, best).join(''), chars.slice(best).join('')];
+  }
+  const lines: string[] = [];
+  let start = 0;
+  while (start < chars.length && lines.length < maxLines) {
+    if (chars.length - start <= maxChars) {
+      lines.push(chars.slice(start).join(''));
+      start = chars.length;
+      break;
+    }
+    let cut = start + maxChars;
+    // Prefer breaking just after punctuation inside the window.
+    for (let i = cut; i > start + Math.floor(maxChars / 2); i -= 1) {
+      if (CAPTION_BREAKS.has(chars[i - 1])) {
+        cut = i;
+        break;
+      }
+    }
+    lines.push(chars.slice(start, cut).join(''));
+    start = cut;
+  }
+  if (start < chars.length) lines[lines.length - 1] += chars.slice(start).join('');
+  return lines;
+};
+
 const MemeCaption: React.FC<{
   text: string;
   color: string;
   width: number;
   height: number;
-}> = ({ text, color, width, height }) => {
-  const base = height * 0.098;
-  const size = Math.min(base, (width * 0.84) / Math.max(1, Array.from(text).length * 1.02));
+  /** Fixed caption size in pixels; wraps the text instead of shrinking it. */
+  fixedSize?: number;
+  maxChars?: number;
+  maxLines?: number;
+}> = ({ text, color, width, height, fixedSize, maxChars = 26, maxLines = 2 }) => {
+  const lines = fixedSize ? wrapCaption(text, maxChars, maxLines) : [text];
+  const longest = Math.max(1, ...lines.map((line) => Array.from(line).length));
+  const base = fixedSize ?? height * 0.098;
+  const size = Math.min(base, (width * 0.84) / (longest * 1.02));
+  // A fixed-size caption is meant to survive later footage underneath it, so
+  // use a white outline around the speaker's own fill (usually black) instead
+  // of the tag's coloured halo.
+  const outer = fixedSize ? '#ffffff' : color;
   return (
     <div
       style={{
         position: 'absolute',
         left: 0,
         right: 0,
-        bottom: height * 0.06,
+        bottom: height * (fixedSize ? 0.045 : 0.06),
         display: 'flex',
         justifyContent: 'center',
         pointerEvents: 'none',
         zIndex: 32,
       }}
     >
-      <div style={{ transform: 'rotate(-1.2deg)' }}>
-        <OutlineText
-          text={text}
-          fill={color}
-          inner="#ffffff"
-          outer={color}
-          size={size}
-          innerWidth={size * 0.055}
-          outerWidth={size * 0.15}
-        />
+      <div style={{ transform: fixedSize ? undefined : 'rotate(-1.2deg)', textAlign: 'center' }}>
+        {lines.map((line, index) => (
+          <div key={`caption-line-${index}`}>
+            <OutlineText
+              text={line}
+              fill={color}
+              inner="#ffffff"
+              outer={outer}
+              size={size}
+              innerWidth={fixedSize ? 0 : size * 0.055}
+              outerWidth={fixedSize ? size * 0.12 : size * 0.15}
+              style={fixedSize ? { lineHeight: 1.34 } : undefined}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1442,6 +1503,12 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
     ? [...shot.characters.filter((entry) => entry.id !== focusId), focusEntry]
     : shot.characters;
   const captionStyle = scene.episode.style?.caption_style ?? 'ba';
+  // Optional fixed caption size (fraction of frame height) for narration
+  // episodes: the caption wraps at the subtitle limits instead of shrinking.
+  const captionFraction = scene.episode.style?.caption_size;
+  const captionSize = captionFraction ? height * captionFraction : undefined;
+  const maxChars = scene.episode.subtitle?.max_chars_per_line ?? 26;
+  const maxLines = scene.episode.subtitle?.max_lines ?? 2;
 
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
@@ -1459,7 +1526,7 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
         {visible('background') ? <SceneBackdrop shot={shot} /> : null}
       </div>
       <AbsoluteFill>
-        {visible('background') ? <AbsoluteFill
+        {visible('background') && shot.characters.length ? <AbsoluteFill
           style={{
             background: `radial-gradient(circle at ${(focusEntry?.x ?? speakingX) * 100}% 46%, rgba(255,240,214,${
               focusEntry ? 0.4 : 0.16
@@ -1562,6 +1629,9 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
                 color={scene.characters[activeLine.speaker]?.color || '#ffffff'}
                 width={width}
                 height={height}
+                fixedSize={captionSize}
+                maxChars={maxChars}
+                maxLines={maxLines}
               />
             ) : (
               <DialogueBox
@@ -1581,6 +1651,9 @@ const ShotView: React.FC<{ shot: Shot; scene: Scene; uiStartFrame: number }> = (
                 color={scene.characters[promptSpeaker]?.color || '#ffffff'}
                 width={width}
                 height={height}
+                fixedSize={captionSize}
+                maxChars={maxChars}
+                maxLines={maxLines}
               />
             ) : (
               <DialogueBox
